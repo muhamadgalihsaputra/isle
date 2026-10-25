@@ -88,6 +88,29 @@ most 256 events). Without EDS (not installed, masked or not answering within
 five seconds) it is `""`; empty or over-long ids are refused with
 `InvalidArgs`.
 
+## io.github.zickrian.isle.Calories1
+
+A local food log kept in `~/.local/share/isle/calories.json`.
+
+| Member | Signature | |
+|---|---|---|
+| `Add(s food, u calories) → t id` | | Adds a food entry at the current time. |
+| `Update(t id, s food, u calories)` | | Changes an entry's food description and calorie value. |
+| `Remove(t id)` | | Removes an entry. |
+| `Entries` | `s` | `[{id, food, calories, at_ms}]`, oldest first. |
+
+## io.github.zickrian.isle.Prayer1
+
+Prayer schedule for the selected city, calculated by AlAdhan using Kemenag
+Indonesia method 20.
+
+| Member | Signature | |
+|---|---|---|
+| `SetLocation(s city, s country)` | | Select a city and refresh today's schedule. |
+| `RefreshNow()` | | Fetch the schedule again. |
+| `RefreshForDate(s date)` | | Fetch a date (`YYYY-MM-DD`) in the selected city's timezone. |
+| `Schedule` | `s` | `{status, city, country, date, timezone, prayers:[{name,time}]}` or a status/error object. |
+
 ## io.github.zickrian.isle.Shelf1
 
 | Member | Signature | |

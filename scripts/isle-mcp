@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}/isle"
+SERVER="$DATA/mcp/server.py"
+[ -f "$SERVER" ] || SERVER="/usr/lib/isle/mcp/server.py"
+PYTHON="$DATA/mcp-venv/bin/python"
+if [ ! -x "$PYTHON" ] || [ ! -f "$SERVER" ]; then
+    echo "Set up Isle MCP first: isle-setup-mcp" >&2
+    exit 1
+fi
+exec "$PYTHON" "$SERVER"

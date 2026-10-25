@@ -84,6 +84,22 @@ const INTERFACES = {
             <property name="Events" type="s" access="read"/>`),
         properties: {Events: 'events'},
     },
+    calories: {
+        xml: node('Calories1', `
+            <method name="Add"><arg name="food" type="s" direction="in"/><arg name="calories" type="u" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="Update"><arg name="id" type="t" direction="in"/><arg name="food" type="s" direction="in"/><arg name="calories" type="u" direction="in"/></method>
+            <method name="Remove"><arg name="id" type="t" direction="in"/></method>
+            <property name="Entries" type="s" access="read"/>`),
+        properties: {Entries: 'calorieEntries'},
+    },
+    prayer: {
+        xml: node('Prayer1', `
+            <method name="SetLocation"><arg name="city" type="s" direction="in"/><arg name="country" type="s" direction="in"/></method>
+            <method name="RefreshNow"/>
+            <method name="RefreshForDate"><arg name="date" type="s" direction="in"/></method>
+            <property name="Schedule" type="s" access="read"/>`),
+        properties: {Schedule: 'prayer'},
+    },
     system: {
         xml: node('System1', `
             <signal name="Event"><arg name="event" type="s"/></signal>

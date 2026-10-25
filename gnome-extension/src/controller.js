@@ -34,13 +34,15 @@ import {KeyboardWatcher, OsdHook, TopBar} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
 import {CallPage} from './pages/call.js';
 import {CalendarPage} from './pages/calendar.js';
+import {CaloriesPage} from './pages/calories.js';
+import {PrayerPage} from './pages/prayer.js';
 import {MediaPage} from './pages/media.js';
 import {NotificationsPage} from './pages/notifications.js';
 import {ShelfPage} from './pages/shelf.js';
 import {TasksPage} from './pages/tasks.js';
 import {TimerPage} from './pages/timer.js';
 import {UsagePage} from './pages/usage.js';
-import {ReminderWatcher} from './reminders.js';
+import {PrayerWatcher, ReminderWatcher} from './reminders.js';
 import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, signInHint, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
@@ -278,8 +280,12 @@ export class Controller {
                 done();
             }));
         });
+        this._prayer = new PrayerWatcher(this._daemon, this._settings, prayer => {
+            this._post(Alerts.reminder(prayer, () => this._chime('complete')));
+        });
         this._syncVoiceEnabled();
         this._syncUsage();
+        this._syncPrayer();
         this._syncEventAlerts();
         // The pointer met while it was still being built (after unlocking, at rest on it) is told now.
         if (this._island.hovered)
@@ -300,6 +306,8 @@ export class Controller {
             () => new TasksPage(this._daemon, size),
             () => new ShelfPage(this._daemon, this._clipboard, this._settings, size),
             () => new CalendarPage(this._daemon, size),
+            () => new CaloriesPage(this._daemon, size),
+            () => new PrayerPage(this._daemon, size),
             () => new UsagePage(this._daemon, size),
         ];
     }
@@ -461,6 +469,8 @@ export class Controller {
                 this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'));
             else if (name === 'agents')
                 this._syncAgents(true);
+            else if (name === 'prayer')
+                this._syncPrayer();
         });
         daemon.connect('agent-event', (_daemon, event) => this._onAgentEvent(event));
         daemon.connect('agent-asking', (_daemon, request) => this._onAgentAsking(request));
@@ -479,6 +489,10 @@ export class Controller {
         this._settingsChanged.push(this._settings.connect('changed::check-updates', () => this._syncUpdates()));
         this._settingsChanged.push(this._settings.connect('changed::lyrics-online', () =>
             this._daemon.call('media', 'SetLyrics', this._settings.get_boolean('lyrics-online'))));
+        this._settingsChanged.push(this._settings.connect('changed::prayer-city', () =>
+            this._later('prayer-location', 600, () => this._syncPrayer())));
+        this._settingsChanged.push(this._settings.connect('changed::prayer-country', () =>
+            this._later('prayer-location', 600, () => this._syncPrayer())));
         this._voice.connect('orb-clicked', () => this._onVoiceKey());
         this._voice.connect('type-requested', () => this._startTyping(''));
         this._voice.connect('typed', (_view, text) => this._ask(text));
@@ -1461,6 +1475,11 @@ export class Controller {
         this._daemon.call('updates', 'SetEnabled', this._settings.get_boolean('check-updates'));
     }
 
+    _syncPrayer() {
+        this._daemon.call('prayer', 'SetLocation', this._settings.get_string('prayer-city'),
+            this._settings.get_string('prayer-country'));
+    }
+
     /** A newer Isle is out: said once per version; in Do Not Disturb, next time Isle starts. */
     _onLatest() {
         const latest = this._daemon.state.updates;
@@ -2113,6 +2132,7 @@ export class Controller {
         this._keyboard.destroy();
         this._shelfHelper.destroy();
         this._reminders.destroy();
+        this._prayer.destroy();
         // Ending focus mode can turn Do Not Disturb off, which the views
         // still show.
         this._focusMode.destroy();

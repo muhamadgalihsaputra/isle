@@ -4,6 +4,7 @@
 //! what the island shows can be unit tested in isolation.
 
 pub mod calendar;
+pub mod calories;
 pub mod clipboard;
 pub mod lrc;
 pub mod pomodoro;

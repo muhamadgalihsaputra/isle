@@ -1,0 +1,13 @@
+[Unit]
+Description=Isle MCP tools for local and remote agents
+After=dbus.service
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/isle/mcp.env
+ExecStart=@BINDIR@/isle-mcp
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -189,10 +189,30 @@
       <summary>Model Codex answers with</summary>
       <description>A model id from Codex; empty for the one Codex itself uses.</description>
     </key>
+    <key name="voice-hermes-model" type="s">
+      <default>''</default>
+      <summary>Model Hermes answers with</summary>
+      <description>A model id served by Hermes; empty uses its configured default.</description>
+    </key>
+    <key name="voice-openai-model" type="s">
+      <default>''</default>
+      <summary>OpenAI-compatible model id</summary>
+      <description>A model id from the configured compatible API endpoint.</description>
+    </key>
+    <key name="voice-omp-model" type="s">
+      <default>''</default>
+      <summary>Model Oh My Pi answers with</summary>
+      <description>An optional provider/model id accepted by Oh My Pi; empty uses its configured default.</description>
+    </key>
     <key name="voice-agy-model" type="s">
       <default>'gemini-3.8-flash-low'</default>
       <summary>Model the voice assistant asks</summary>
       <description>A model id from “agy models”; empty for agy's default.</description>
+    </key>
+    <key name="voice-custom-instructions" type="s">
+      <default>''</default>
+      <summary>Extra instructions for coding-agent backends</summary>
+      <description>Added to Isle's instructions for Claude Code and Codex. Antigravity manages its own personality.</description>
     </key>
     <key name="voice-speech-model" type="s">
       <default>'small'</default>
@@ -274,6 +294,22 @@
     <key name="chimes" type="b">
       <default>true</default>
       <summary>Play a sound when a focus session or break ends</summary>
+    </key>
+    <key name="prayer-city" type="s">
+      <default>'Jakarta'</default>
+      <summary>City for prayer times</summary>
+    </key>
+    <key name="prayer-country" type="s">
+      <default>'Indonesia'</default>
+      <summary>Country for prayer times</summary>
+    </key>
+    <key name="prayer-reminders" type="b">
+      <default>true</default>
+      <summary>Remind me at prayer times</summary>
+    </key>
+    <key name="prayer-alerted" type="as">
+      <default>[]</default>
+      <summary>Prayer reminders already shown today</summary>
     </key>
   </schema>
 </schemalist>

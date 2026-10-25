@@ -34,6 +34,7 @@ export default class IslePreferences extends ExtensionPreferences {
         window.add(this._clipboardPage(settings, window));
         window.add(this._timerPage(settings, window));
         window.add(this._voicePage(settings));
+        window.add(this._wellbeingPage(settings));
         window.add(this._usagePage(settings));
         window.add(this._aboutPage(settings, window));
     }
@@ -126,12 +127,12 @@ export default class IslePreferences extends ExtensionPreferences {
 
     _voicePage(settings) {
         const page = new Adw.PreferencesPage({title: 'Assistant', icon_name: 'audio-input-microphone-symbolic'});
-        const installed = AI_PROVIDERS.filter(provider => findProgram(provider.command));
+        const installed = AI_PROVIDERS.filter(provider => provider.available?.() ?? Boolean(findProgram(provider.command)));
         const group = new Adw.PreferencesGroup({
             title: 'Voice Assistant',
             description: 'Press the shortcut (or the mic in the open island) and speak. Speech is recognised on this ' +
                 'computer (set up once with isle-setup-voice in a terminal); the request goes to the AI you pick, with your ' +
-                'own sign-in and plan.',
+                'own sign-in and plan, Hermes local API, or a configured compatible endpoint.',
         });
         page.add(lookGroup(settings));
         group.add(switchRow(settings, 'voice-assistant', 'Voice assistant', 'The shortcut and the mic in the open island'));
@@ -140,14 +141,23 @@ export default class IslePreferences extends ExtensionPreferences {
         // Only the AIs installed here are offered; with none, the assistant says how to get one.
         const provider = choiceRow(settings, 'voice-provider', 'AI', installed.length
             ? 'Answers with your own sign-in; Isle runs its actions'
-            : 'Install Claude Code, Codex or Antigravity (agy), and sign in', [
+            : 'Install an assistant CLI, enable Hermes API, or configure an OpenAI-compatible endpoint', [
             ['auto', installed.length === 1 ? `Automatic (${installed[0].name})`
                 : installed.length ? 'Automatic (the one you are signed in to)' : 'None installed'],
             ...installed.map(({id, name}) => [id, name]),
         ]);
         const model = new Adw.ComboRow({title: 'Model'});
-        let modelChoices = [];
+        const modelId = new Adw.EntryRow({title: 'OpenAI-compatible model id'});
+        modelId.visible = false;
+        modelId.text = settings.get_string('voice-openai-model');
+        group.add(modelId);
         let modelKey = null;
+        modelId.connect('changed', () => {
+            const value = modelId.text.trim();
+            if (modelKey && value !== settings.get_string(modelKey))
+                settings.set_string(modelKey, value);
+        });
+        let modelChoices = [];
         // Swapping the list moves the selection; that must not write a model of its own.
         let syncing = false;
         const syncModel = () => {
@@ -163,10 +173,14 @@ export default class IslePreferences extends ExtensionPreferences {
         const fillModel = () => {
             const wanted = settings.get_string('voice-provider');
             const current = installed.find(p => p.id === wanted) ?? automatic;
+            modelId.visible = ['openai-compatible', 'oh-my-pi'].includes(current?.id);
             model.visible = Boolean(current);
             if (!current)
                 return;
             modelKey = current.modelKey;
+            modelId.title = current.id === 'oh-my-pi' ? 'Optional provider/model id' : 'OpenAI-compatible model id';
+            if (['openai-compatible', 'oh-my-pi'].includes(current.id) && modelId.text !== settings.get_string(modelKey))
+                modelId.text = settings.get_string(modelKey);
             modelChoices = current.models();
             // A model set by hand, not in the list, stays shown and kept.
             const value = settings.get_string(modelKey);
@@ -187,7 +201,49 @@ export default class IslePreferences extends ExtensionPreferences {
         model.connect('destroy', () => settings.disconnect(changed));
         syncModel();
 
-        const options = [provider, model];
+        const customInstructions = new Adw.ExpanderRow({
+            title: 'Custom instructions',
+            subtitle: 'Added for coding agents and compatible APIs; Hermes and Antigravity manage their own personality',
+        });
+        const instructionsView = new Gtk.TextView({
+            wrap_mode: Gtk.WrapMode.WORD_CHAR,
+            left_margin: 10,
+            right_margin: 10,
+            top_margin: 8,
+            bottom_margin: 8,
+        });
+        const instructionsBuffer = instructionsView.buffer;
+        instructionsBuffer.set_text(settings.get_string('voice-custom-instructions'), -1);
+        const instructionsScroll = new Gtk.ScrolledWindow({
+            min_content_height: 110,
+            max_content_height: 180,
+            hscrollbar_policy: Gtk.PolicyType.NEVER,
+        });
+        instructionsScroll.set_child(instructionsView);
+        const instructionsRow = new Adw.PreferencesRow();
+        instructionsRow.set_child(instructionsScroll);
+        customInstructions.add_row(instructionsRow);
+        let saveInstructions = 0;
+        instructionsBuffer.connect('changed', () => {
+            if (saveInstructions)
+                GLib.source_remove(saveInstructions);
+            saveInstructions = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
+                saveInstructions = 0;
+                const raw = instructionsBuffer.get_text(instructionsBuffer.get_start_iter(),
+                    instructionsBuffer.get_end_iter(), true);
+                const text = raw.slice(0, 8000);
+                if (raw.length > 8000)
+                    instructionsBuffer.set_text(text, -1);
+                settings.set_string('voice-custom-instructions', text);
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        customInstructions.connect('destroy', () => {
+            if (saveInstructions)
+                GLib.source_remove(saveInstructions);
+        });
+
+        const options = [provider, model, customInstructions];
         options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower; downloaded once', [
             ['tiny', 'Tiny (44 MB)'],
             ['base', 'Base (82 MB)'],
@@ -233,6 +289,28 @@ export default class IslePreferences extends ExtensionPreferences {
                 'asks you first.',
         });
         page.add(notes);
+        return page;
+    }
+
+    _wellbeingPage(settings) {
+        const page = new Adw.PreferencesPage({title: 'Daily Life', icon_name: 'preferences-system-time-symbolic'});
+        const prayer = new Adw.PreferencesGroup({
+            title: 'Prayer times',
+            description: 'AlAdhan schedule using Indonesia’s Kemenag calculation method. Times follow the selected city.',
+        });
+        const city = new Adw.EntryRow({title: 'City'});
+        const country = new Adw.EntryRow({title: 'Country'});
+        settings.bind('prayer-city', city, 'text', Gio.SettingsBindFlags.DEFAULT);
+        settings.bind('prayer-country', country, 'text', Gio.SettingsBindFlags.DEFAULT);
+        prayer.add(city);
+        prayer.add(country);
+        prayer.add(switchRow(settings, 'prayer-reminders', 'Prayer reminders', 'Show a reminder at each prayer time'));
+        page.add(prayer);
+        const calories = new Adw.PreferencesGroup({
+            title: 'Calories',
+            description: 'Log food and calories in the island. Entries stay on this computer.',
+        });
+        page.add(calories);
         return page;
     }
 
@@ -667,7 +745,38 @@ const AI_PROVIDERS = [
             ['claude-sonnet-4-6', 'Claude Sonnet'],
         ],
     },
+    {
+        id: 'hermes', name: 'Hermes Agent', command: '', modelKey: 'voice-hermes-model',
+        available: () => GLib.file_test(GLib.build_filenamev([GLib.get_home_dir(), '.hermes', '.env']), GLib.FileTest.EXISTS),
+        about: 'Hermes keeps its own personality and memory; Isle adds its desktop instructions',
+        models: () => [['', 'Hermes default'], ...apiModels('hermes')],
+    },
+    {
+        id: 'openai-compatible', name: 'OpenAI-compatible API', command: '', modelKey: 'voice-openai-model',
+        available: () => signedIn('openai-compatible'),
+        about: 'Store endpoint and API key in ~/.config/isle/ai.env (chmod 600)',
+        models: () => [...apiModels('openai-compatible').map(id => [id, id])],
+    },
+    {
+        id: 'oh-my-pi', name: 'Oh My Pi', command: 'omp', modelKey: 'voice-omp-model',
+        about: 'Oh My Pi coding agent, with its own provider settings and Isle desktop actions',
+        models: () => [['', 'Oh My Pi default']],
+    },
 ];
+
+function apiModels(provider) {
+    try {
+        const proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE,
+            null, DAEMON, DAEMON_PATH, ASSISTANT_INTERFACE, null);
+        const result = proxy.call_sync('ListModels', new GLib.Variant('(s)', [provider]),
+            Gio.DBusCallFlags.NONE, 8000, null);
+        const [models] = result.deep_unpack();
+        return JSON.parse(models).map(id => [id, id]);
+    } catch (e) {
+        console.warn(`Isle: could not list ${provider} models: ${e.message}`);
+        return [];
+    }
+}
 
 /** Where Claude Code keeps its settings and sign-in: `$CLAUDE_CONFIG_DIR`, else ~/.claude. */
 function claudeConfigDir() {
@@ -703,6 +812,20 @@ function signedIn(id) {
         return exists(codexHome(), 'auth.json') || env('OPENAI_API_KEY');
     case 'agy':
         return exists(GLib.get_home_dir(), '.gemini/antigravity-cli/antigravity-oauth-token');
+    case 'hermes':
+        if (env('HERMES_API_KEY'))
+            return true;
+        try {
+            const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([GLib.get_home_dir(), '.hermes', '.env']));
+            return /^API_SERVER_KEY\s*=\s*.+$/m.test(new TextDecoder().decode(bytes));
+        } catch {
+            return false;
+        }
+    case 'openai-compatible':
+        return (env('ISLE_OPENAI_API_KEY') && env('ISLE_OPENAI_BASE_URL')) ||
+            exists(GLib.get_user_config_dir(), 'isle', 'ai.env');
+    case 'oh-my-pi':
+        return Boolean(findProgram('omp'));
     default:
         return false;
     }

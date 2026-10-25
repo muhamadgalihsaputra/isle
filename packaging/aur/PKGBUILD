@@ -10,7 +10,9 @@ arch=('x86_64')
 url='https://github.com/zickrian/isle'
 license=('GPL-3.0-or-later' 'OFL-1.1')
 depends=('gnome-shell>=1:46' 'dconf' 'gtk4' 'glib2' 'pango' 'gdk-pixbuf2' 'gcc-libs' 'glibc' 'bash')
-optdepends=('vulkan-icd-loader: speech recognition on the graphics card, else on the processor')
+optdepends=('vulkan-icd-loader: speech recognition on the graphics card, else on the processor'
+  'python: optional Isle MCP server'
+  'python-virtualenv: set up the optional Isle MCP server')
 provides=('isle')
 conflicts=('isle')
 options=('!strip' '!debug')
@@ -24,6 +26,10 @@ package() {
 
   install -Dm755 -t "$pkgdir/usr/bin" bin/isled bin/isle-shelf bin/isle-whisper scripts/isle-charge-limit
   install -Dm755 scripts/setup-voice.sh "$pkgdir/usr/bin/isle-setup-voice"
+  install -Dm755 scripts/setup-mcp.sh "$pkgdir/usr/bin/isle-setup-mcp"
+  install -Dm755 scripts/isle-mcp "$pkgdir/usr/bin/isle-mcp"
+  install -Dm644 mcp/server.py "$pkgdir/usr/lib/isle/mcp/server.py"
+  install -Dm644 mcp/requirements.txt "$pkgdir/usr/share/isle/mcp/requirements.txt"
 
   local ext="$pkgdir/usr/share/gnome-shell/extensions/$uuid"
   install -d "$ext"
@@ -34,15 +40,17 @@ package() {
   chmod -R u=rwX,go=rX "$ext"
 
   local service
-  for service in io.github.zickrian.isle.Daemon.service io.github.zickrian.isle.ShelfWindow.service isled.service; do
+  for service in io.github.zickrian.isle.Daemon.service io.github.zickrian.isle.ShelfWindow.service isled.service isle-mcp.service; do
     sed -e 's|@BINDIR@|/usr/bin|' -e 's|file://%h/.local/share/doc/isle|file:///usr/share/doc/isle|' \
       "data/$service" > "$srcdir/$service"
   done
   install -Dm644 -t "$pkgdir/usr/share/dbus-1/services" \
     "$srcdir/io.github.zickrian.isle.Daemon.service" "$srcdir/io.github.zickrian.isle.ShelfWindow.service"
   install -Dm644 -t "$pkgdir/usr/lib/systemd/user" "$srcdir/isled.service"
+  install -Dm644 -t "$pkgdir/usr/lib/systemd/user" "$srcdir/isle-mcp.service"
 
   install -Dm644 -t "$pkgdir/usr/share/fonts/isle" data/fonts/InterVariable.ttf
   install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE data/fonts/Inter-LICENSE.txt
   install -Dm644 -t "$pkgdir/usr/share/doc/isle" README.md CHANGELOG.md
+  install -Dm644 docs/mcp.md "$pkgdir/usr/share/doc/isle/mcp.md"
 }

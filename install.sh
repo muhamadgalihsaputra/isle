@@ -104,8 +104,14 @@ if [ "$SHELF" = 1 ] || [ -x "$BINDIR/isle-shelf" ]; then
 fi
 install_service isled.service "$CONFIG/systemd/user"
 install -Dm644 README.md "$DATA/doc/isle/README.md"
+install -Dm644 docs/mcp.md "$DATA/doc/isle/mcp.md"
 # The voice assistant: `isle-setup-voice` downloads the speech model once.
 install -Dm755 scripts/setup-voice.sh "$BINDIR/isle-setup-voice"
+install -Dm755 scripts/setup-mcp.sh "$BINDIR/isle-setup-mcp"
+install -Dm755 scripts/isle-mcp "$BINDIR/isle-mcp"
+install_service isle-mcp.service "$CONFIG/systemd/user"
+mkdir -p "$DATA/isle/mcp"
+cp -r mcp/. "$DATA/isle/mcp/"
 # Sets a lasting battery charge limit; the assistant types it into a terminal when asked.
 install -Dm755 scripts/isle-charge-limit "$BINDIR/isle-charge-limit"
 

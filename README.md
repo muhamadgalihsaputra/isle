@@ -332,6 +332,12 @@ or fixing software with a command you approve. Ask a follow-up while the
 answer shows, or later the same day: it remembers the conversation (see
 [the conversation](#the-conversation)).
 
+Isle also provides an optional MCP server for agents. It can expose Isle tasks,
+reminders, calendar events, prayer times, focus timer, media status, and the
+local calorie log. See [the MCP server guide](docs/mcp.md) for setup and permissions.
+See [assistant runtime setup](docs/assistant-runtimes.md) for Hermes and OpenAI-compatible APIs.
+See [assistant platform status](docs/assistant-platform-status.md) for implemented features and remaining verification.
+
 **Installing and fixing things.** Ask "install LibreOffice" and it looks
 first: which Linux this is, which ways to install it has (apt, dnf, pacman,
 zypper, Flatpak, Snap, npm), whether the app is already there, and when
@@ -499,7 +505,7 @@ camera or the microphone itself.
 
 ## Data & network
 
-Isle has no server and no telemetry; your clipboard history, reminders,
+Isle has no Isle-operated server and no telemetry; your clipboard history, reminders,
 events, timer and the assistant's chats stay in `~/.local/share/isle`, and
 speech is recognised on this computer. It goes online only for synced lyrics
 ([LRCLIB](https://lrclib.net)) and cover art, once per song (lyrics can be
@@ -513,6 +519,14 @@ Copies from password managers
 are never kept, and only GNOME Shell may read the clipboard history from
 Isle's service or steer its assistant. The call preview is drawn by GNOME
 Shell from what is on screen and never recorded.
+
+The optional MCP service is off until you set it up and enable it. It offers
+read tools and enables only the writes you list in `~/.config/isle/mcp.env`;
+it listens on loopback by default. The optional food log stays in
+`~/.local/share/isle/calories.json`.
+Custom instructions in Settings → Assistant are sent with requests to Claude
+Code and Codex; Antigravity manages its own personality. See the
+[MCP setup guide](docs/mcp.md) for remote access and write permissions.
 [SECURITY.md](SECURITY.md#what-leaves-your-computer) lists exactly what is
 sent where, and the assistant's safety rules.
 

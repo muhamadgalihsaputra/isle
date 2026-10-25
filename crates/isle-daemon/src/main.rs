@@ -7,6 +7,7 @@ mod agents;
 mod assistant;
 mod calendar;
 mod caller;
+mod calories;
 mod clipboard;
 mod clock;
 mod http;
@@ -14,6 +15,7 @@ mod login_env;
 mod media;
 mod meeting;
 mod pomodoro;
+mod prayer;
 mod reminders;
 mod shelf;
 mod store;
@@ -26,6 +28,7 @@ mod usage;
 use anyhow::{Context, bail};
 use futures_util::StreamExt;
 use log::{info, warn};
+use std::process::Command as ProcessCommand;
 use tokio::signal::unix::{SignalKind, signal};
 use zbus::connection;
 use zbus::fdo::{DBusProxy, RequestNameFlags, RequestNameReply};
@@ -33,9 +36,11 @@ use zbus::fdo::{DBusProxy, RequestNameFlags, RequestNameReply};
 use crate::agents::AgentsService;
 use crate::assistant::AssistantService;
 use crate::calendar::CalendarService;
+use crate::calories::CaloriesService;
 use crate::clipboard::ClipboardService;
 use crate::media::MediaService;
 use crate::pomodoro::PomodoroService;
+use crate::prayer::PrayerService;
 use crate::reminders::RemindersService;
 use crate::shelf::ShelfService;
 use crate::system::SystemService;
@@ -129,6 +134,8 @@ async fn main() -> anyhow::Result<()> {
     server.at(OBJECT_PATH, ShelfService::load()).await?;
     server.at(OBJECT_PATH, ClipboardService::load()).await?;
     server.at(OBJECT_PATH, CalendarService::load()).await?;
+    server.at(OBJECT_PATH, CaloriesService::load()).await?;
+    server.at(OBJECT_PATH, PrayerService::load()).await?;
     server.at(OBJECT_PATH, RemindersService::load()).await?;
     server.at(OBJECT_PATH, SystemService::default()).await?;
     server.at(OBJECT_PATH, assistant).await?;
@@ -248,6 +255,14 @@ async fn doctor() {
         }
     );
     println!("Voice assistant:\n{}", assistant::report());
+    let mcp = ProcessCommand::new("systemctl")
+        .args(["--user", "is-active", "isle-mcp.service"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_else(|| "inactive (run isle-setup-mcp, then enable isle-mcp.service)".into());
+    println!("Isle MCP server: {mcp}");
     println!("AI alerts:\n{}", agents::report());
 }
 

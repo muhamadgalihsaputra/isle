@@ -948,6 +948,10 @@ export function aiSettings(settings) {
         agy_model: settings.get_string('voice-agy-model'),
         claude_model: settings.get_string('voice-claude-model'),
         codex_model: settings.get_string('voice-codex-model'),
+        hermes_model: settings.get_string('voice-hermes-model'),
+        openai_model: settings.get_string('voice-openai-model'),
+        omp_model: settings.get_string('voice-omp-model'),
+        custom_instructions: settings.get_string('voice-custom-instructions'),
     };
 }
 

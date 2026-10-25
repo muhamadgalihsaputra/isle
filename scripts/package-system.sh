@@ -39,6 +39,11 @@ stage() {
     install -Dm755 -t "$root/usr/bin" "$SRC/bin/isled" "$SRC/bin/isle-shelf" "$SRC/bin/isle-whisper" \
         "$SRC/scripts/isle-charge-limit"
     install -Dm755 "$SRC/scripts/setup-voice.sh" "$root/usr/bin/isle-setup-voice"
+    install -Dm755 "$SRC/scripts/setup-mcp.sh" "$root/usr/bin/isle-setup-mcp"
+    install -Dm755 "$SRC/scripts/isle-mcp" "$root/usr/bin/isle-mcp"
+    install -Dm644 "$SRC/data/isle-mcp.service" "$root/usr/lib/systemd/user/isle-mcp.service"
+    install -Dm644 "$SRC/mcp/server.py" "$root/usr/lib/isle/mcp/server.py"
+    install -Dm644 "$SRC/mcp/requirements.txt" "$root/usr/share/isle/mcp/requirements.txt"
 
     local ext="$root/usr/share/gnome-shell/extensions/$UUID"
     mkdir -p "$ext"
@@ -53,6 +58,7 @@ stage() {
     service isled.service "$root/usr/lib/systemd/user"
     install -Dm644 -t "$fonts" "$SRC/data/fonts/InterVariable.ttf" "$SRC/data/fonts/Inter-LICENSE.txt"
     install -Dm644 -t "$root/usr/share/doc/isle" "$SRC/README.md" "$SRC/CHANGELOG.md"
+    install -Dm644 "$SRC/docs/mcp.md" "$root/usr/share/doc/isle/mcp.md"
 }
 
 build_deb() {
@@ -140,6 +146,11 @@ cp -a "$stage/." "%{buildroot}/"
 /usr/bin/isle-shelf
 /usr/bin/isle-whisper
 /usr/bin/isle-setup-voice
+/usr/bin/isle-setup-mcp
+/usr/bin/isle-mcp
+/usr/lib/isle/mcp/server.py
+/usr/share/isle/mcp/requirements.txt
+/usr/lib/systemd/user/isle-mcp.service
 /usr/bin/isle-charge-limit
 /usr/share/gnome-shell/extensions/$UUID
 /usr/share/glib-2.0/schemas/org.gnome.shell.extensions.isle.gschema.xml

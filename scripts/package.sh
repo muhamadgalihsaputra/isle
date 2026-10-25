@@ -17,10 +17,12 @@ rm -rf "$OUT" "dist/$NAME.tar.gz" "dist/$NAME.tar.gz.sha256"
 mkdir -p "$OUT/bin"
 install -m755 target/release/isled target/release/isle-shelf target/release/isle-whisper "$OUT/bin/"
 strip "$OUT/bin/isled" "$OUT/bin/isle-shelf" "$OUT/bin/isle-whisper"
-cp -r gnome-extension data install.sh uninstall.sh README.md LICENSE CHANGELOG.md "$OUT/"
+cp -r gnome-extension data mcp install.sh uninstall.sh README.md LICENSE CHANGELOG.md "$OUT/"
+mkdir -p "$OUT/docs"
+install -m644 docs/mcp.md "$OUT/docs/mcp.md"
 # What install.sh installs as commands: the voice set-up and the battery charge limit.
 mkdir -p "$OUT/scripts"
-install -m755 scripts/setup-voice.sh scripts/isle-charge-limit "$OUT/scripts/"
+install -m755 scripts/setup-voice.sh scripts/setup-mcp.sh scripts/isle-mcp scripts/isle-charge-limit "$OUT/scripts/"
 # Compiled on install, for the GLib there.
 rm -f "$OUT/gnome-extension/schemas/gschemas.compiled"
 

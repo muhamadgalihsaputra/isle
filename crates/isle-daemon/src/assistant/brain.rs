@@ -11,17 +11,29 @@ use super::agy::{self, Agy};
 use super::answer::Answer;
 use super::claude::Claude;
 use super::codex::Codex;
+use super::omp::Omp;
+use super::openai::Client as ApiClient;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     Agy,
     Claude,
     Codex,
+    Hermes,
+    OpenAi,
+    OhMyPi,
 }
 
 /// Tried in this order when the user picked "auto", signed-in ones first. agy comes last: its terms bar
 /// third-party tools, so it answers only when it is all there is, or picked.
-const AUTO: [Provider; 3] = [Provider::Claude, Provider::Codex, Provider::Agy];
+const AUTO: [Provider; 6] = [
+    Provider::Claude,
+    Provider::Codex,
+    Provider::Hermes,
+    Provider::OpenAi,
+    Provider::OhMyPi,
+    Provider::Agy,
+];
 
 impl Provider {
     pub fn id(self) -> &'static str {
@@ -29,6 +41,9 @@ impl Provider {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex",
+            Provider::Hermes => "hermes",
+            Provider::OpenAi => "openai-compatible",
+            Provider::OhMyPi => "oh-my-pi",
         }
     }
 
@@ -38,6 +53,9 @@ impl Provider {
             Provider::Agy => "Antigravity",
             Provider::Claude => "Claude Code",
             Provider::Codex => "Codex",
+            Provider::Hermes => "Hermes",
+            Provider::OpenAi => "OpenAI-compatible API",
+            Provider::OhMyPi => "Oh My Pi",
         }
     }
 
@@ -46,6 +64,8 @@ impl Provider {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex",
+            Provider::Hermes | Provider::OpenAi => "",
+            Provider::OhMyPi => "omp",
         }
     }
 
@@ -72,6 +92,9 @@ impl Provider {
                 super::codex::user_auth().exists()
                     || std::env::var_os("OPENAI_API_KEY").is_some_and(|key| !key.is_empty())
             }
+            Provider::Hermes => super::openai::Client::hermes_configured(),
+            Provider::OpenAi => super::openai::byok_configured(),
+            Provider::OhMyPi => self.program().is_some(),
         }
     }
 
@@ -81,6 +104,9 @@ impl Provider {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex login",
+            Provider::Hermes => "hermes gateway",
+            Provider::OpenAi => "configure ISLE_OPENAI_BASE_URL and ISLE_OPENAI_API_KEY",
+            Provider::OhMyPi => "omp",
         }
     }
 
@@ -95,14 +121,21 @@ impl Provider {
         self != Provider::Agy
     }
 
-    pub fn all() -> [Provider; 3] {
+    pub fn all() -> [Provider; 6] {
         AUTO
+    }
+
+    pub fn available(self) -> bool {
+        match self {
+            Provider::Hermes | Provider::OpenAi => self.signed_in(),
+            _ => self.program().is_some(),
+        }
     }
 
     /// `wanted` ("agy", "claude", "codex" or "auto"), if installed; for "auto", the first installed and
     /// signed in, else the first installed (which then asks to sign in).
     pub fn pick(wanted: &str) -> Option<Provider> {
-        let installed = |p: &Provider| p.program().is_some();
+        let installed = |p: &Provider| p.available();
         match AUTO.into_iter().find(|p| p.id() == wanted) {
             Some(provider) => installed(&provider).then_some(provider),
             None => AUTO
@@ -200,6 +233,8 @@ pub enum Brain {
     Agy(Agy),
     Claude(Claude),
     Codex(Codex),
+    Api(Provider, ApiClient),
+    Omp(Omp),
 }
 
 impl Brain {
@@ -212,9 +247,22 @@ impl Brain {
         workspace: &Path,
         instructions: &str,
     ) -> anyhow::Result<Self> {
+        if matches!(provider, Provider::Hermes | Provider::OpenAi) {
+            let client = match provider {
+                Provider::Hermes => ApiClient::hermes(model, instructions)?,
+                Provider::OpenAi => ApiClient::byok(model, instructions)?,
+                _ => unreachable!(),
+            };
+            return Ok(Brain::Api(provider, client));
+        }
         let program = provider.program().ok_or_else(|| {
             anyhow::anyhow!("could not start {}: no such file", provider.command())
         })?;
+        if provider == Provider::OhMyPi {
+            return Ok(Brain::Omp(
+                Omp::start(&program, model, resume, workspace, instructions).await?,
+            ));
+        }
         Ok(match provider {
             Provider::Agy => Brain::Agy(Agy::start_program(&program, model, resume, workspace)?),
             Provider::Claude => Brain::Claude(Claude::start(
@@ -227,6 +275,9 @@ impl Brain {
             Provider::Codex => {
                 Brain::Codex(Codex::start(&program, model, resume, workspace, instructions).await?)
             }
+            Provider::Hermes | Provider::OpenAi | Provider::OhMyPi => {
+                unreachable!("providers handled above")
+            }
         })
     }
 
@@ -234,7 +285,8 @@ impl Brain {
     pub async fn warm(&mut self) -> anyhow::Result<()> {
         match self {
             Brain::Codex(codex) => codex.warm().await,
-            Brain::Agy(_) | Brain::Claude(_) => Ok(()),
+            Brain::Agy(_) | Brain::Claude(_) | Brain::Api(_, _) => Ok(()),
+            Brain::Omp(omp) => omp.warm().await,
         }
     }
 
@@ -243,6 +295,8 @@ impl Brain {
             Brain::Agy(_) => Provider::Agy,
             Brain::Claude(_) => Provider::Claude,
             Brain::Codex(_) => Provider::Codex,
+            Brain::Api(provider, _) => *provider,
+            Brain::Omp(_) => Provider::OhMyPi,
         }
     }
 
@@ -258,6 +312,8 @@ impl Brain {
             Brain::Agy(agy) => agy.ask(prompt, activity).await,
             Brain::Claude(claude) => claude.ask(prompt, activity, draft).await,
             Brain::Codex(codex) => codex.ask(prompt, activity, draft).await,
+            Brain::Api(_, client) => client.ask(prompt, activity, draft).await,
+            Brain::Omp(omp) => omp.ask(prompt, activity, draft).await,
         }
     }
 
@@ -267,6 +323,8 @@ impl Brain {
             Brain::Agy(agy) => agy.conversation.clone(),
             Brain::Claude(claude) => claude.conversation.clone(),
             Brain::Codex(codex) => codex.conversation.clone(),
+            Brain::Api(_, _) => None,
+            Brain::Omp(omp) => omp.conversation(),
         }
     }
 
@@ -276,6 +334,8 @@ impl Brain {
             Provider::Agy => agy::forget(id),
             Provider::Claude => super::claude::forget(id),
             Provider::Codex => super::codex::forget(id),
+            Provider::Hermes | Provider::OpenAi => {}
+            Provider::OhMyPi => Omp::forget(id),
         }
     }
 
@@ -378,6 +438,22 @@ pub fn explain(provider: Provider, error: &str) -> Failure {
             set_up: false,
             model: String::new(),
         };
+    }
+    if matches!(provider, Provider::Hermes | Provider::OpenAi)
+        && says(&[
+            "unauthorized",
+            "unauthenticated",
+            "401",
+            "invalid api key",
+            "authentication",
+        ])
+    {
+        let hint = if provider == Provider::Hermes {
+            "Check API_SERVER_KEY in ~/.hermes/.env and restart `hermes gateway`."
+        } else {
+            "Check ISLE_OPENAI_API_KEY in ~/.config/isle/ai.env."
+        };
+        return Failure::from(("The API key was rejected", hint));
     }
     if says(&[
         "log in",
