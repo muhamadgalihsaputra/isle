@@ -87,9 +87,11 @@ impl ShelfWindow {
             }
         });
 
+        // From the left at their own width, as in the island: the row never stretches a tile.
         let tiles = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(6)
+            .halign(gtk::Align::Start)
             .valign(gtk::Align::Center)
             .build();
         let scroller = gtk::ScrolledWindow::builder()

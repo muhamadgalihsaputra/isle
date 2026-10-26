@@ -20,7 +20,7 @@ import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
 import {VERTICAL, eventActor, maximize, onUiScale, px, uiScale, unmaximize} from './compat.js';
 import {plainBody} from './notifications.js';
-import {icon, iconButton, pillButton, wrapLines} from './widgets.js';
+import {cornerClose, icon, iconButton, pillButton, revealClose, wrapLines} from './widgets.js';
 
 
 /** Sizes in CSS pixels (see `px`). */
@@ -204,12 +204,16 @@ export const VoiceView = GObject.registerClass({
         'card-stop': {},
         // Something inside changed its size (the conversation opened, say): the island fits it again.
         'size-changed': {},
+        // The × on the face, over an answer: put it away.
+        'close-requested': {},
     },
 }, class VoiceView extends St.Widget {
     _init(look) {
         // Reactive, so a scroll over it can open the conversation (see `vfunc_scroll_event`).
         super._init({style_class: 'isle-voice', layout_manager: new Clutter.BinLayout(), reactive: true});
         this._phase = 'listening';
+        /** Whether isled is not recording yet (see `micWaiting`). */
+        this._micWaiting = false;
         /** Shown instead of "Listening…" while it listens for the first request. */
         this.greeting = null;
         /** While it listens for a follow-up, what it just asked, so you know what you answer. */
@@ -229,7 +233,13 @@ export const VoiceView = GObject.registerClass({
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._faceButton.connect('clicked', () => this.emit(this.typing ? 'speak' : 'orb-clicked'));
-        row.add_child(this._faceButton);
+        // Over an answer, under the pointer, a × on the face's corner puts it away, as an alert's does.
+        this._pointerOn = false;
+        this._close = cornerClose(() => this.emit('close-requested'), {out: 10});
+        this._lead = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        this._lead.add_child(this._faceButton);
+        this._lead.add_child(this._close);
+        row.add_child(this._lead);
 
         this._texts = new St.BoxLayout({...VERTICAL, y_align: Clutter.ActorAlign.CENTER});
         // What was heard, or what it asked; with earlier messages, a chevron opens the conversation.
@@ -379,6 +389,7 @@ export const VoiceView = GObject.registerClass({
         if (['listening', 'transcribing'].includes(state.phase))
             this._dropEndedCard(state.card);
         this._phase = state.phase;
+        this._syncClose();
         this._exchange = {heard: state.heard ?? '', reply: clip(state.reply ?? '')};
         /** Whether the answer was cut: the chevron then opens it whole in the conversation. */
         this._replyCut = state.phase === 'reply' && this._exchange.reply !== (state.reply ?? '').trim();
@@ -387,7 +398,7 @@ export const VoiceView = GObject.registerClass({
         this._noteStep(state.phase, step);
         const [top, main, dim, markdown] = {
             // The first time it opens it greets you.
-            listening: [this.followUp ?? '', this.greeting ?? 'Listening…', !this.greeting],
+            listening: [this.followUp ?? '', this._listeningText(), this._micWaiting || !this.greeting],
             transcribing: [this.followUp ?? '', 'One moment…', true],
             // Its answer as it writes it; else an agent's step as it happens ("Searching ~/Downloads for
             // “ttd”…"), else thinking.
@@ -549,6 +560,7 @@ export const VoiceView = GObject.registerClass({
         if (this.chatOpen || !this._history.length)
             return;
         this._chat.visible = true;
+        this._syncClose();
         this._heardButton.visible = false;
         this._syncEarlier();
         this._syncCardText();
@@ -565,6 +577,7 @@ export const VoiceView = GObject.registerClass({
         if (!this.chatOpen)
             return;
         this._chat.visible = false;
+        this._syncClose();
         this._heardButton.visible = Boolean(this._heard.text);
         this._syncCardText();
         this._syncEarlier();
@@ -656,10 +669,43 @@ export const VoiceView = GObject.registerClass({
         return this._entry.visible;
     }
 
+    /** While isled is not recording yet (getting the AI or the speech model ready), "Getting ready…" in place of
+     * "Listening…": what was said then would be lost. */
+    set micWaiting(waiting) {
+        if (waiting === this._micWaiting)
+            return;
+        this._micWaiting = waiting;
+        if (this._phase !== 'listening' || this.typing)
+            return;
+        this._text.clutter_text.use_markup = false;
+        this._text.text = this._listeningText();
+        if (waiting || !this.greeting)
+            this._text.add_style_class_name('isle-voice-text-dim');
+        else
+            this._text.remove_style_class_name('isle-voice-text-dim');
+        this.emit('size-changed');
+    }
+
+    _listeningText() {
+        return this._micWaiting ? 'Getting ready…' : this.greeting ?? 'Listening…';
+    }
+
+    /** Whether the pointer is on the island: an answer then shows its × (see `_syncClose`). */
+    set pointerOn(on) {
+        this._pointerOn = on;
+        this._syncClose();
+    }
+
+    // Only an answer in the pill has one: at work there is Stop, and the conversation closes with Esc.
+    _syncClose() {
+        revealClose(this._close, this._pointerOn && ['reply', 'error'].includes(this._phase) && !this.chatOpen);
+    }
+
     /** Shows the field to type a request in, starting with `initial` (a key typed while it listened); `card` is isled's. */
     startTyping(initial = '', card = null) {
         this._dropEndedCard(card);
         this._phase = 'typing';
+        this._syncClose();
         // A new request: the steps and working time of one still at work when the field opened are not its.
         this._lastPhase = 'typing';
         this._lastStep = null;
@@ -773,7 +819,7 @@ export const VoiceView = GObject.registerClass({
         // Set outright: the row kept an earlier, shorter height for them.
         this._texts.set_size(width, Math.min(natural, most - ROW_PADDING * scale));
         // Beside a line or two it sits in the middle; beside more, level with the first line.
-        this._faceButton.y_align = this._action.y_align =
+        this._lead.y_align = this._action.y_align =
             natural > (FACE_SIZE + 8) * scale ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
         const row = Math.round(Math.min(most, Math.max(MIN_HEIGHT * scale, natural + ROW_PADDING * scale)));
         this._row.height = row;

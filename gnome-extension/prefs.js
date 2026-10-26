@@ -50,6 +50,9 @@ export default class IslePreferences extends ExtensionPreferences {
             row.connect('activated', () => new Gtk.UriLauncher({uri: url}).launch(window, null, null));
             return row;
         };
+        // Whether a newer Isle is out, as isled last found, and the switch for asking.
+        for (const row of updateRows(settings, window, this.metadata['version-name'] ?? '', this.path.startsWith('/usr/')))
+            about.add(row);
         about.add(link('Website', 'Features, installing and updating', 'https://github.com/zickrian/isle'));
         about.add(link('Report a problem', 'On GitHub; paste the report below in it', 'https://github.com/zickrian/isle/issues/new/choose'));
         const report = new Adw.ActionRow({title: 'Copy a bug report', subtitle: 'Versions, a check of what works, and recent logs (isled --report)',
@@ -392,7 +395,6 @@ export default class IslePreferences extends ExtensionPreferences {
         alerts.add(switchRow(settings, 'track-peek', 'New song', 'Briefly show the song when the track changes'));
         alerts.add(switchRow(settings, 'lyrics-online', 'Lyrics', 'Look up the playing song’s lyrics on LRCLIB'));
         alerts.add(switchRow(settings, 'chimes', 'Sounds', 'Chime when a focus session or break ends, and for reminders'));
-        alerts.add(switchRow(settings, 'check-updates', 'New versions', 'Say when a newer Isle is out (asks GitHub once a day)'));
         page.add(alerts);
 
         const calls = new Adw.PreferencesGroup({
@@ -888,7 +890,7 @@ function codexModels() {
     return [];
 }
 
-/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's logs. */
+/** The AI providers signed in here, as rows to switch: Claude Code's sign-in, and Codex's (or its logs). */
 // Where isled reads them (usage.rs): Claude Code's config dir, the user's Codex home and Isle's own.
 function usageProviders() {
     const providers = [];
@@ -900,9 +902,10 @@ function usageProviders() {
     } catch {
         // Not signed in to Claude Code.
     }
+    const signedIn = GLib.file_test(GLib.build_filenamev([codexHome(), 'auth.json']), GLib.FileTest.EXISTS);
     const sessions = [[codexHome(), 'sessions'], [GLib.get_user_data_dir(), 'isle', 'codex', 'sessions']];
-    if (sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
-        providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'As Codex last saw it'});
+    if (signedIn || sessions.some(dir => GLib.file_test(GLib.build_filenamev(dir), GLib.FileTest.IS_DIR)))
+        providers.push({key: 'usage-codex', title: 'ChatGPT', subtitle: 'Signed in with Codex'});
     return providers;
 }
 
@@ -1006,6 +1009,93 @@ function confirm(window, {heading, body, action}, onYes) {
 }
 
 /** Runs `isled --report` and puts what it says on the clipboard, saying so on `row`. */
+/** Where updating is explained, and the command that updates a one-line install. */
+const UPDATE_HELP = 'https://github.com/zickrian/isle/blob/main/docs/install.md#updating';
+const INSTALL_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/zickrian/isle/main/get.sh | bash';
+
+/** Whether version `a` ("1.3.0") is newer than `b`, number by number (as isled's updates.rs). */
+function isNewer(a, b) {
+    const parts = v => v.split('.').map(part => parseInt(part, 10) || 0);
+    const [x, y] = [parts(a), parts(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        if ((x[i] ?? 0) !== (y[i] ?? 0))
+            return (x[i] ?? 0) > (y[i] ?? 0);
+    }
+    return false;
+}
+
+/** "today", "yesterday" or the date, for when isled last asked GitHub. */
+function checkedWhen(ms) {
+    const then = GLib.DateTime.new_from_unix_local(Math.floor(ms / 1000));
+    const now = GLib.DateTime.new_now_local();
+    const days = now.get_day_of_year() - then.get_day_of_year() + 365 * (now.get_year() - then.get_year());
+    return days <= 0 ? 'today' : days === 1 ? 'yesterday' : then.format('%e %b').trim();
+}
+
+/** The About page's update status (up to date, or the newer version with how to get it) and the switch to
+ * ask GitHub; both follow what isled last found (its updates.json) as it changes. */
+function updateRows(settings, window, version, packaged) {
+    const status = new Adw.ActionRow();
+    const icon = new Gtk.Image({valign: Gtk.Align.CENTER});
+    status.add_prefix(icon);
+    const how = new Gtk.Button({label: 'How to update', valign: Gtk.Align.CENTER, css_classes: ['flat']});
+    how.connect('clicked', () => new Gtk.UriLauncher({uri: UPDATE_HELP}).launch(window, null, null));
+    const copy = new Gtk.Button({label: 'Copy command', valign: Gtk.Align.CENTER, tooltip_text: INSTALL_COMMAND});
+    copy.connect('clicked', () => {
+        window.get_display().get_clipboard().set(INSTALL_COMMAND);
+        copy.label = 'Copied';
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            copy.label = 'Copy command';
+            return GLib.SOURCE_REMOVE;
+        });
+    });
+    status.add_suffix(how);
+    status.add_suffix(copy);
+    const check = switchRow(settings, 'check-updates', 'Check for new versions', 'Asks GitHub once a day; nothing else is sent');
+
+    const file = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_data_dir(), 'isle', 'updates.json']));
+    const sync = () => {
+        let checked = null;
+        try {
+            checked = JSON.parse(new TextDecoder().decode(file.load_contents(null)[1]));
+        } catch {}
+        const on = settings.get_boolean('check-updates');
+        const newer = on && Boolean(checked?.latest) && isNewer(checked.latest, version);
+        how.visible = newer;
+        copy.visible = newer && !packaged;
+        icon.css_classes = newer ? ['accent'] : on && checked?.at_ms ? ['success'] : ['dim-label'];
+        if (!on) {
+            icon.icon_name = 'software-update-available-symbolic';
+            status.title = 'Not checking for new versions';
+            status.subtitle = 'Turn it on below to hear when one is out';
+        } else if (newer) {
+            icon.icon_name = 'software-update-available-symbolic';
+            status.title = `Isle ${checked.latest} is out`;
+            status.subtitle = packaged ? 'Install its new package, then log out and back in'
+                : 'Run the install command again, then log out and back in';
+        } else if (checked?.at_ms) {
+            icon.icon_name = 'object-select-symbolic';
+            status.title = 'You’re up to date';
+            status.subtitle = `Checked ${checkedWhen(checked.at_ms)}`;
+        } else {
+            icon.icon_name = 'software-update-available-symbolic';
+            status.title = 'Not checked yet';
+            status.subtitle = 'Isle asks GitHub once a day';
+        }
+    };
+    // isled writes it after each look (switched on, or once a day): the row follows while open.
+    const monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
+    monitor.connect('changed', () => sync());
+    const changed = settings.connect('changed::check-updates', () => sync());
+    window.connect('close-request', () => {
+        monitor.cancel();
+        settings.disconnect(changed);
+        return false;
+    });
+    sync();
+    return [status, check];
+}
+
 function copyReport(window, row) {
     const isled = findProgram('isled');
     if (!isled) {

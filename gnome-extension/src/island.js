@@ -121,6 +121,12 @@ export const Island = GObject.registerClass({
         this.notify('hovered');
     }
 
+    /** Whether the pointer is on it, read again: a keyboard grab keeps the leave from it while it lasts. */
+    syncHover() {
+        const [x, y] = global.get_pointer();
+        this._setHovered(this.contains(global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, x, y)));
+    }
+
     // A finger is no pointer resting on it: a tap's own enter and leave are not hovers.
     vfunc_enter_event(event) {
         if (!event.get_event_sequence())

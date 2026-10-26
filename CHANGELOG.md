@@ -6,6 +6,69 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-26
+
+### Fixed
+
+- The Usage page shows your ChatGPT plan and limits as they are now, as Codex's /status does, rather than
+  as Codex last logged them: after an upgrade or downgrade it said the old plan (and its old limits) until
+  Codex was used again. It asks at most every 10 minutes, or when the page opens, as for Claude.
+- Settings → AI Usage lists ChatGPT as soon as Codex is signed in, even before Codex was first used.
+
+## [1.3.0] - 2026-10-25
+
+### Changed
+
+- Alerts go sooner: a notification after 4 seconds, as GNOME's own banner does, and a passing one such as
+  "Screenshot captured" after 2.5. Once the pointer leaves an alert it goes 1.5 seconds later, its button
+  included, rather than starting its time over. An answer from the assistant stays at most 8 seconds.
+- Under the pointer, an alert that the pointer doesn't open (one with a button, such as "Show in Files")
+  and an answer from the assistant show a small × on their icon to put them away, as macOS's
+  notifications do. It closes them while the keys are with another app, where Esc can't reach the island.
+- Do Not Disturb shows as a moon before the time (or a call's or recording's length), whatever the island
+  holds beside it. Before, music, a timer or the unread dot hid the moon. The Notifications page says what
+  still gets through while it is on.
+- An answer from the assistant cut short in its alert says "Click to read more".
+- The music bars move about 60 times a second on any display. On a 144 Hz one, music playing costs GNOME
+  Shell a third less; everything else moves at the display's own rate.
+- Settings → About shows whether Isle is up to date ("You're up to date · Checked today"), or which newer
+  version is out, with How to update and Copy command. The switch for checking moved there from Alerts.
+
+### Fixed
+
+- A file on the shelf no longer widens its tile to take up the rest of the row (seen after dropping a
+  file in). Every tile keeps its own width, as in the island.
+- Resting the pointer on an answer from the assistant holds it to read, with its ×. Before, the island
+  opened on its pages (often Music) and the answer was gone.
+- With the assistant at work in the background, resting the pointer on the island shows its progress, and
+  the island goes back to the background when the pointer leaves. Before, it stayed open and kept the
+  keyboard from the app. A click still keeps it open, and Esc puts it back.
+- After typing in the island (to the assistant, a to-do), alerts and answers go on time again. If the
+  pointer left the island while it had the keyboard, Isle went on thinking the pointer was there, and
+  alerts waited for it to leave.
+- The Caps Lock arrow comes in smoothly with its alert, rising as it fades in. Before, the badge showed
+  empty for a moment, and the arrow then blinked out and back as it settled.
+- On GNOME 46, a long answer from the assistant in the background shows again. Cutting it to three lines
+  failed there, so the answer never showed and later alerts waited behind it.
+- An alert that fails to show no longer holds up the alerts behind it, and if Isle's volume or brightness
+  alert fails, GNOME's own shows instead.
+- After a fullscreen window, alerts go on time again. As with typing, a pointer on the island when it hid
+  was still counted as there.
+- Closing the island just as you finish speaking no longer loses the request. It carries on in the
+  background, its actions run and its answer comes as an alert. Before, the assistant waited unseen.
+- The assistant says "Getting ready…" until the microphone really records, rather than "Listening…" while
+  the AI or the speech model is still starting: words said then were lost.
+- Asked to switch the power mode, the assistant uses Isle's own switch, and only where power-profiles-daemon
+  is missing offers a command that works (`sudo tee`, as sudo does not reach a `>` redirect).
+- Asking while the assistant is still answering says so, rather than showing "Listening…" until the last
+  request ends. A microphone that sends nothing says so after 4 seconds, rather than listening forever.
+- Turning the assistant off while it works in the background stops the request. Before, clicking the
+  island did nothing until it ended, up to 10 minutes with a command waiting for Run.
+- Updating without a user service manager (no `systemctl --user`) now runs the new isled within seconds.
+  Before, the old one went on running until the next restart.
+- If part of Isle fails to start, it takes away what it had set up, so GNOME's volume pop-up and the
+  assistant's shortcut keep working. Turning Isle off also stops watching notifications it showed.
+
 ## [1.2.1] - 2026-10-25
 
 ### Fixed

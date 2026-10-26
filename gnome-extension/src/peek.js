@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Short-lived alerts the island grows to show. An alert: {key (same key replaces), icon | gicon | art | bot, badge,
-// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle, code, tone, value, status, level, action | actions,
-// duration, onActivate, page, priority, transient, motion (the icon's, once; see `playMotion` in widgets.js)}.
+// appIcon, ring, ringIconSize, volume, title, titleLines, subtitle (cutSubtitle in its place when the title is cut), code,
+// tone, value, status, level, action | actions, duration, onActivate, page, priority, transient, motion (the icon's,
+// once; see `playMotion` in widgets.js)}.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -13,7 +14,8 @@ import St from 'gi://St';
 import {BotIcon} from './botIcon.js';
 import {VERTICAL, onUiScale, px} from './compat.js';
 import * as Palette from './palette.js';
-import {Art, LevelBar, Ring, VolumeGlyph, icon, isSymbolic, ownIcon, pillButton, playMotion, wrapLines} from './widgets.js';
+import {Art, LevelBar, Ring, VolumeGlyph, cornerClose, icon, isSymbolic, ownIcon, pillButton, playMotion, revealClose,
+    wrapLines} from './widgets.js';
 
 /** Narrowest and widest an alert gets; in between it fits its content. Sizes are in CSS pixels (see `px`). */
 const MIN_WIDTH = 220;
@@ -63,8 +65,10 @@ function badgeStyle(rgb, neutral) {
         `background-gradient-end: ${css(base, bottom)};`;
 }
 
-export const PeekView = GObject.registerClass(
-class PeekView extends St.Widget {
+export const PeekView = GObject.registerClass({
+    // The × on its icon (see `showClose`).
+    Signals: {'close-requested': {}},
+}, class PeekView extends St.Widget {
     _init() {
         super._init({style_class: 'isle-peek', layout_manager: new Clutter.BinLayout()});
 
@@ -104,7 +108,12 @@ class PeekView extends St.Widget {
         this._volume = new VolumeGlyph();
         // The assistant, for what it or an AI agent asks or has done.
         this._bot = new BotIcon(BOT_SIZE);
-        this._row.add_child(this._badge);
+        // The badge, with a × on its corner under the pointer; a fixed-size box, so the × moves nothing.
+        this._close = cornerClose(() => this.emit('close-requested'));
+        this._lead = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        this._lead.add_child(this._badge);
+        this._lead.add_child(this._close);
+        this._row.add_child(this._lead);
 
         const texts = new St.BoxLayout({...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
         this._texts = texts;
@@ -152,10 +161,12 @@ class PeekView extends St.Widget {
         /** A value counting up with the ring's sweep: {final, digits, target}. */
         this._count = null;
         this._ring.connect('notify::progress', () => this._syncCount());
-        // Put away, the next alert here is a new one and animates in.
+        // Put away, the next alert here is a new one and animates in, its × hidden.
         this.connect('notify::mapped', () => {
-            if (!this.mapped)
+            if (!this.mapped) {
                 this._forget();
+                this.showClose(false);
+            }
         });
         this.connect('destroy', () => this._onDestroy());
     }
@@ -186,7 +197,11 @@ class PeekView extends St.Widget {
         const decision = this._asks || Boolean(alert.code);
         this._row.x_align = decision ? Clutter.ActorAlign.FILL : Clutter.ActorAlign.CENTER;
         this._row.style_class = decision ? 'isle-peek-row isle-peek-row-asks' : 'isle-peek-row';
-        this._badge.y_align = this._texts.y_align = decision ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
+        this._lead.y_align = this._texts.y_align = decision ? Clutter.ActorAlign.START : Clutter.ActorAlign.CENTER;
+        // One that asks is answered with its own buttons; the volume and the like pass by themselves.
+        this._closable = !decision && !alert.transient;
+        if (!this._closable)
+            this.showClose(false);
         if (alert.bot) {
             this._bot.look = alert.bot.look;
             this._bot.form = alert.bot.form ?? 'attentive';
@@ -254,8 +269,10 @@ class PeekView extends St.Widget {
         // Its height set: the column would measure a wrapped title as one line and sit off centre.
         this._title.height = wrap ? Math.ceil(this._titleLines * this._lineHeight) : -1;
         this._title.text = title;
-        this._subtitle.text = alert.subtitle ?? '';
-        this._subtitle.visible = Boolean(alert.subtitle);
+        // Cut short: what says how to read it all.
+        const subtitle = (title !== (alert.title ?? '') && alert.cutSubtitle) || alert.subtitle;
+        this._subtitle.text = subtitle ?? '';
+        this._subtitle.visible = Boolean(subtitle);
 
         this._code.text = alert.code ?? '';
         this._code.visible = Boolean(alert.code);
@@ -350,6 +367,11 @@ class PeekView extends St.Widget {
         this._answerTimer = 0;
     }
 
+    /** Shows the × on the icon, under the pointer, unless the alert has no use for one. */
+    showClose(shown) {
+        revealClose(this._close, shown && this._closable);
+    }
+
     /** A ring's percentage counts up as it sweeps. */
     _syncCount() {
         if (!this._count)
@@ -393,14 +415,21 @@ class PeekView extends St.Widget {
         const letters = [...text];
         let fitted = letters.length > room ? letters.slice(0, room).join('') : text;
         if (!fits(fitted) || fitted !== text) {
-            // Pango broke the lines already: up to where the last one ends (in bytes), then room for the ….
-            const end = layout.get_line_count() > max ? layout.get_line_readonly(max - 1) : null;
+            // Pango broke the lines already: up to where the line after the last starts (in bytes), then room
+            // for the …. Found with an iterator: GNOME 46's GJS throws on reading a PangoLayoutLine.
+            let end = null;
+            if (layout.get_line_count() > max) {
+                const lines = layout.get_iter();
+                for (let i = 0; i < max; i++)
+                    lines.next_line();
+                end = lines.get_index();
+            }
             let words = fitted;
-            if (end)
-                words = new TextDecoder().decode(new TextEncoder().encode(fitted).subarray(0, end.start_index + end.length));
+            if (end !== null)
+                words = new TextDecoder().decode(new TextEncoder().encode(fitted).subarray(0, end));
             words = words.trimEnd().split(' ');
             // Cut through by `room` (not at a line's end): its last word is only part of one.
-            if (!end && words.length > 1)
+            if (end === null && words.length > 1)
                 words.pop();
             for (;;) {
                 fitted = `${words.join(' ').replace(/[\s,.;:]+$/, '')}…`;

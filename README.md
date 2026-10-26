@@ -123,7 +123,7 @@ appear in the same place instead of in the middle of the screen.
 <tr>
 <td width="50%" valign="top">
 <img src="docs/images/alerts.png" alt="The closed island with a song and the focus timer, then alerts for a meeting with Join, Claude Code asking to run a command, a notification with Reply, and charging" width="100%"><br>
-<b>Alerts</b> for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it; swipe up to put it away. Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up.
+<b>Alerts</b> for volume, brightness, Caps Lock, charging, low battery, Bluetooth devices with their battery, going offline, reminders, meetings about to start, AI plan limits and GNOME notifications with their buttons, in the same place instead of the middle of the screen. Hold the pointer on one to keep it, with a × on its icon to put it away (or swipe up). Icons drawn in SF Symbols' manner move once as they appear: the bolt pulses, the bell sways, rings sweep and count up.
 </td>
 <td width="50%" valign="top">
 <img src="docs/images/approvals.png" alt="Claude Code asking to run npm run build, with Deny, Allow and Always; then Allowed" width="100%"><br>
@@ -284,7 +284,7 @@ Click the gear right of the clock in the open island (or Isle's gear in the
 - **Alerts:** volume and brightness; charging, network, Bluetooth and Caps
   Lock, each on its own; privacy dots, new songs, sounds; GNOME's own
   notification banners instead of the island's; what Super+V opens (the
-  clipboard history, or GNOME's calendar); lyrics online; new versions;
+  clipboard history, or GNOME's calendar); lyrics online;
   a reminder before calendar events, and how many minutes before.
   Alerts other than a low battery are not shown while Do Not Disturb is on.
 - **Calls:** show calls in the island, and the live preview of the call.
@@ -299,8 +299,9 @@ Click the gear right of the clock in the open island (or Isle's gear in the
 - **AI Usage:** on or off, which plans to show, and when to warn; and
   under **AI Agents**, a switch for each of Claude Code and Codex that is
   installed (on by default; none listed when neither is).
-- **About:** the version, help, a bug report to copy (`isled --report`),
-  and resetting every setting.
+- **About:** the version and whether it is up to date (with how to update,
+  and the switch for asking GitHub once a day), help, a bug report to copy
+  (`isled --report`), and resetting every setting.
 
 ## Voice assistant
 
@@ -443,20 +444,21 @@ readable by you alone, and the AI's copy apart from your own chats with it.
 ## AI usage
 
 Isle finds your plans from the apps you are signed in to: **Claude** with
-Claude Code's sign-in, and **ChatGPT** from what Codex writes as you use it.
+Claude Code's sign-in, and **ChatGPT** with Codex's.
 It shows each limit your plan has (a 5-hour window, the week, a model's
 week), when it resets, and warns at 80% and 95% (set in Settings). A plan
 you are not signed in to does not show at all.
 
-Claude's numbers come from the same page Claude Code's `/usage` reads; it is
-not a documented API, so it may change. Isle asks it every ten minutes (at
+Claude's numbers come from the same page Claude Code's `/usage` reads, and
+ChatGPT's from the one Codex's `/status` reads; neither is a documented API,
+so they may change. Isle asks each every ten minutes (at
 most every two while the Usage page is open), and not while the screen is
 locked. Offline, as at login before the
 network is up, it tries again within a minute; when Claude's server fails it
 waits longer each time. It never signs in or refreshes a sign-in itself, and
-with usage turned off it asks nothing at all. ChatGPT's numbers
-are read from Codex's own logs, with no network at all, so they are as of
-your last use of Codex.
+with usage turned off it asks nothing at all. When ChatGPT can't be asked
+(offline, or Codex's sign-in ran out), its numbers come from Codex's own
+logs, as of your last use of Codex.
 
 **AI agents.** Isle connects to Claude Code and Codex when it finds them,
 also when you install one later, and says so once. It adds its hooks to

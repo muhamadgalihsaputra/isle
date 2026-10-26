@@ -149,6 +149,10 @@ if systemctl --user daemon-reload 2>/dev/null; then
     # A failure here is reported, not fatal: the extension still goes in, and isled starts once called.
     systemctl --user restart isled.service ||
         echo "isled did not start; see 'journalctl --user -u isled' (the island still works without it, minus its services)."
+else
+    # An isled started by D-Bus would go on running the old version from its replaced file: stopped, it
+    # starts anew as the island calls it again (within seconds; see the extension's service check).
+    pkill -u "$(id -u)" -x isled 2>/dev/null || true
 fi
 
 # The voice assistant set up with an older Isle used Python (up to 3 GB): moved to isle-whisper,

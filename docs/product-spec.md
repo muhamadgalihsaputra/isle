@@ -101,7 +101,7 @@ place, dimmed, so the layout never jumps.
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
 | Right-click | On an alert: put it away; else bring the call, or the music player, to the front | Bring the music player to the front |
-| Pointer on an alert | Holds it; it goes 1.5 s after the pointer leaves | – |
+| Pointer on an alert | Holds it; it goes 1.5 s after the pointer leaves (one asking, a reminder or an event keeps its own time). One the pointer doesn't open (with a button) and an answer show a × on their icon to put them away | – |
 | Two-finger swipe up / down on an alert | Put it away / open it | – |
 | Super+V (GNOME's calendar shortcut) | Open the clipboard history, search ready, held open (Settings may leave it to GNOME's calendar) | Close |
 | Super+I (Settings: any shortcut) | Ask the assistant; typing while it listens types the request instead | Speak again |
@@ -139,7 +139,8 @@ a scrollbar.
   keeps to its end of the island, all as far in.
 - Left slot, first that applies: breathing red dot (screen recording) →
   green phone (a call) → focus timer ring → cover art (a song playing or paused) → white dot (unseen
-  notifications) → moon (Do Not Disturb on).
+  notifications).
+- Do Not Disturb: a small moon before the clock (or the call's or recording's length), whatever the sides hold.
 - While the screen records, the centre shows how long it has been recording
   instead of the clock; during a call (and no recording), how long the call
   has lasted, in green.
@@ -353,9 +354,9 @@ computer. Right-clicking an alert puts it away without opening it.
 | New song (off by default) | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
 | Screen recording started | red record icon | Recording screen | Stop | 2.6 s |
-| Notification (GNOME's sound) | app icon, large | title / first line (only who it is from while the screen is shared) | its first button ("Mark as read") | 5 s; critical 20 s, instant and sticky |
+| Notification (GNOME's sound) | app icon, large | title / first line (only who it is from while the screen is shared) | its first button ("Mark as read") | 4 s; passing (a screenshot taken) 2.5 s; critical 20 s, instant and sticky |
 | Reminder (+ chime) | bell | the reminder | – | 8 s, sticky |
-| Assistant done in the background | mic | the answer | – | as long as it takes to read |
+| Assistant done in the background (resting the pointer holds it; it opens no page) | mic | the answer / Isle Assistant (· Click to read more, when cut) | – | as long as it takes to read, at most 8 s |
 | Isle's service stopped | warning | Isle's service isn't running | Restart | 8 s |
 | Newer Isle (once per version) | update | Isle 0.x is out | How | 8 s |
 | AI plan nearly used up | the plan's logo in a ring of its colour (Claude coral, ChatGPT green; red when nearly gone) | Claude / Weekly limit · resets Sat 09:30 | 86% | 8 s |
@@ -456,7 +457,9 @@ Send. Text can be selected and is copied as the selection settles; a click
 on a command copies it. + shows "Started a new chat · Undo" for 5 s.
 
 Closed while it works, the request and its command carry on: the bot shows
-in the closed island and the answer comes as an alert.
+in the closed island and the answer comes as an alert. Resting the pointer on
+it shows the work without taking the keyboard, and it goes back when the
+pointer leaves; a click keeps it open, Esc putting it back.
 
 ### Notifications and Do Not Disturb
 
@@ -466,7 +469,7 @@ opens the clipboard history instead of the drop-down). Rules
 match GNOME's: low-urgency and already-seen notifications never pop up, and
 apps whose banners are turned off in Settings stay quiet. Do Not Disturb is
 GNOME's own setting, so it stays in sync with Quick Settings; while it is on,
-only critical notifications pop up. Clicking a notification alert opens it;
+only critical notifications pop up, and a line under the heading says so. Clicking a notification alert opens it;
 hovering opens the Notifications page.
 
 ## 7. Data and reliability

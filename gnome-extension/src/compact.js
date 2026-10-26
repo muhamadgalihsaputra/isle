@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The resting island: the clock flanked by live activities (recording, call or timer
-// left, music right, privacy dots far right). A paused song keeps its cover. A second
-// activity takes the right side: the timer's or a call's time, or the music bars.
+// left, music right, privacy dots far right), a moon before it during Do Not Disturb.
+// A paused song keeps its cover. A second activity takes the right side: the timer's
+// or a call's time, or the music bars.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -23,9 +24,11 @@ const ASSISTANT_SIZE = 18;
 
 /** Sizes hanging below the top bar, and inside it with smaller text, in CSS pixels. */
 const SIZES = {
-    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 13, call: 15},
-    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 12, call: 14},
+    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 14, call: 15},
+    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 13, call: 14},
 };
+/** Between the Do Not Disturb moon and the time, in CSS pixels (as .isle-compact-clock-box's spacing). */
+const MOON_GAP = 6;
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
@@ -59,7 +62,6 @@ export const CompactView = GObject.registerClass({
         this._ring = new Ring({size: 20, lineWidth: 3});
         this._art = new Art({size: 24, radius: 6});
         this._dot = new St.Widget({style_class: 'isle-unseen-dot', y_align: Clutter.ActorAlign.CENTER});
-        this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 13, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER});
         this._recordingDot = new RecordingDot();
         // A call: a green phone, and on the right a red microphone while it is muted.
         this._phone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
@@ -73,14 +75,21 @@ export const CompactView = GObject.registerClass({
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
 
         const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
+        const times = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         // How long the screen has been recording, in place of the clock.
         this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
         // How long the call has lasted, in green.
         this._callTime = new St.Label({style_class: 'isle-compact-clock isle-compact-call-time', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
-        center.add_child(this._clock);
-        center.add_child(this._elapsed);
-        center.add_child(this._callTime);
+        times.add_child(this._clock);
+        times.add_child(this._elapsed);
+        times.add_child(this._callTime);
+        // Do Not Disturb: a moon before the time (or what takes its place), as iOS shows a Focus, whatever the sides hold.
+        this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 14, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        const centerRow = new St.BoxLayout({style_class: 'isle-compact-clock-box', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        centerRow.add_child(this._moon);
+        centerRow.add_child(times);
+        center.add_child(centerRow);
 
         this._right = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._bars = new Bars({height: 16});
@@ -97,7 +106,7 @@ export const CompactView = GObject.registerClass({
         // Each side's sign keeps to its edge, so all sit as far in from the island's ends. The slots are
         // told not to expand, or their children's x_expand (which the alignment needs) would widen them.
         const align = (actors, x_align) => actors.forEach(actor => actor.set({x_align, x_expand: true}));
-        align([this._ring, this._art, this._dot, this._moon, this._recordingDot, this._phone], Clutter.ActorAlign.START);
+        align([this._ring, this._art, this._dot, this._recordingDot, this._phone], Clutter.ActorAlign.START);
         align([this._bars, this._micOff, this._serviceDown, this._assistant, this._secondTimer, this._secondCall], Clutter.ActorAlign.END);
 
         // As wide as the privacy dots at the far right, so the clock stays centred.
@@ -142,7 +151,9 @@ export const CompactView = GObject.registerClass({
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
         const privacy = this._privacyWidth();
-        return px(this._left.child || this._right.child ? size.activities : size.clock) + privacy + 2 * this._secondExtra;
+        // With nothing beside the clock, the island widens for the moon; beside an activity there is room.
+        const moon = this._moon.visible ? size.moon + MOON_GAP : 0;
+        return px(this._left.child || this._right.child ? size.activities : size.clock + moon) + privacy + 2 * this._secondExtra;
     }
 
     _secondPart(sign, styleClass) {
@@ -175,10 +186,15 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
-    /** Shows a moon while Do Not Disturb is on and nothing else is on the left. */
+    /** Shows a moon before the time while Do Not Disturb is on. */
     set doNotDisturb(on) {
-        this._dnd = on;
-        this._refresh();
+        if (on === this._moon.visible)
+            return;
+        // Measured before it shows: the clock alone makes room for it (see `preferredWidth`).
+        const widthBefore = this.preferredWidth;
+        this._moon.visible = on;
+        if (this.preferredWidth !== widthBefore)
+            this.emit('width-changed');
     }
 
     /** Shows that isled is not running, on the right before anything else. */
@@ -245,13 +261,11 @@ export const CompactView = GObject.registerClass({
         const activities = [recording && 'recording', onCall && 'call', hasTrack && 'music', timerActive && 'timer']
             .filter(Boolean);
         const [primary, second] = activities;
-        // Left: the activity's sign, else the unread dot or DND. Both slots keep their width when empty, so
-        // the centre stays centred.
+        // Left: the activity's sign, else the unread dot. Both slots keep their width when empty, so the centre
+        // stays centred.
         let left = {recording: this._recordingDot, call: this._phone, music: this._art, timer: this._ring}[primary] ?? null;
         if (!left && this._unseen)
             left = this._dot;
-        else if (!left && this._dnd)
-            left = this._moon;
         if (this._left.child !== left)
             this._left.child = left;
         let right = primary === 'music' ? this._bars : null;
@@ -475,7 +489,7 @@ export const CompactView = GObject.registerClass({
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
         // Slots may hold actors that are not currently children.
-        for (const actor of [this._ring, this._art, this._dot, this._moon, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant, this._serviceDown,
+        for (const actor of [this._ring, this._art, this._dot, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant, this._serviceDown,
             this._secondTimer, this._secondCall]) {
             if (!actor.get_parent())
                 actor.destroy();

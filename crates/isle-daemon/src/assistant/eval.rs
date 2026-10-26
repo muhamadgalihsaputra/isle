@@ -275,6 +275,7 @@ fn installed_already(answer: &Answer) -> bool {
         "is installed",
         "already there",
         "already on your",
+        "already on this",
         "already have",
         "already got",
         "installed already",

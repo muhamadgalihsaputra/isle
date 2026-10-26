@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Notifications: a heading with Do Not Disturb and Clear, over a list of one-line rows,
-// newest first. Click one to open it. See docs/product-spec.md.
+// Notifications: a heading with Do Not Disturb and Clear (and, while it is on, what still gets through),
+// over a list of one-line rows, newest first. Click one to open it. See docs/product-spec.md.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
@@ -42,6 +42,7 @@ class NotificationsPage extends Page {
         /** Apps whose stack of notifications is unfolded. */
 
         this.add_child(this._buildBar());
+        this.add_child(this._buildDndNote());
         this.add_child(this._buildList());
 
         this._centerHandlers = [
@@ -81,6 +82,18 @@ class NotificationsPage extends Page {
         bar.add_child(this._dndButton);
         bar.add_child(this._clearButton);
         return bar;
+    }
+
+    /** While Do Not Disturb is on, what it does: a moon and a line under the heading. */
+    _buildDndNote() {
+        this._dndNote = new St.BoxLayout({style_class: 'isle-notifications-dnd-note', visible: false});
+        // Dimmed as the line beside it: the moon is drawn white, so its colour can't be set.
+        this._dndNote.add_child(new St.Icon({gicon: icon('isle-moon'), icon_size: 10, opacity: 130, y_align: Clutter.ActorAlign.CENTER}));
+        const text = label('Do Not Disturb: new ones wait here; urgent ones still show', 'isle-notifications-dnd-text',
+            {x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        this._dndNote.add_child(text);
+        return this._dndNote;
     }
 
     _buildList() {
@@ -141,6 +154,7 @@ class NotificationsPage extends Page {
         else
             this._dndButton.remove_style_pseudo_class('checked');
         setButtonIcon(this._dndButton, on ? 'isle-moon' : 'isle-bell');
+        this._dndNote.visible = on;
     }
 
     /** A row: the app's icon, who and what on one line, and when; under the pointer, its buttons and ×. */

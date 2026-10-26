@@ -11,7 +11,11 @@ import {notificationIcon, plainBody} from './notifications.js';
 const OSD_DURATION = 1500;
 const STATUS_DURATION = 2600;
 const REMINDER_DURATION = 8000;
-const NOTIFICATION_DURATION = 5000;
+/** As long as GNOME's own banner; a passing one (a screenshot taken) less. The pointer on it holds it. */
+const NOTIFICATION_DURATION = 4000;
+const TRANSIENT_NOTIFICATION_DURATION = 2500;
+/** The longest an answer stays to be read, as the open island gives it (see VOICE_READ_MS in controller.js). */
+const ANSWER_MAX_DURATION = 8000;
 /** A critical notification stays this long once someone is there to see it. */
 const CRITICAL_DURATION = 20000;
 
@@ -207,6 +211,8 @@ export function track(nowPlaying) {
 
 /** Notifications already watched (each with what to do once it is withdrawn), and those since withdrawn. */
 const watched = new WeakMap();
+/** Each watched notification's `destroy` handler, undone by `stopWatching` as Isle stops. */
+const watchIds = new Map();
 const withdrawn = new WeakSet();
 /** Each notification's own number, so alerts for different ones never replace each other. */
 const numbers = new WeakMap();
@@ -222,8 +228,19 @@ function watchWithdrawal(item, onWithdrawn) {
     const id = item.connect('destroy', () => {
         withdrawn.add(item);
         item.disconnect(id);
+        watchIds.delete(item);
         watched.get(item)?.();
     });
+    watchIds.set(item, id);
+}
+
+/** Stops watching notifications, so none calls back into an Isle that stopped. */
+export function stopWatching() {
+    for (const [item, id] of watchIds) {
+        item.disconnect(id);
+        watched.delete(item);
+    }
+    watchIds.clear();
 }
 
 /** Whether a notification still waits to be seen: not withdrawn, nor read in the list meanwhile. */
@@ -275,7 +292,7 @@ export function notification(item, urgent, {onShown, onWithdrawn}, shared = fals
         // A critical one stands out in red.
         tone: urgent ? 'bad' : 'neutral',
         priority: urgent ? 'instant' : undefined,
-        duration: urgent ? CRITICAL_DURATION : NOTIFICATION_DURATION,
+        duration: urgent ? CRITICAL_DURATION : item.isTransient ? TRANSIENT_NOTIFICATION_DURATION : NOTIFICATION_DURATION,
         page: 'notifications',
         onActivate: () => {
             if (!withdrawn.has(item))
@@ -607,9 +624,10 @@ export function assistant(state, open) {
         // An answer may take three lines, so a question at its end still shows.
         titleLines: 3,
         subtitle: failed ? state.hint ?? '' : 'Isle Assistant',
+        cutSubtitle: failed ? undefined : 'Isle Assistant · Click to read more',
         tone: failed ? 'bad' : 'good',
         // Long enough to read, as the open island gives it.
-        duration: Math.min(REMINDER_DURATION + 4000, STATUS_DURATION + 45 * text.length),
+        duration: Math.min(ANSWER_MAX_DURATION, STATUS_DURATION + 45 * text.length),
         onActivate: open,
     };
 }

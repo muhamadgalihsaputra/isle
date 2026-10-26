@@ -205,7 +205,9 @@ How much of the user's AI plans is used. Claude's numbers come from
 `api.anthropic.com/api/oauth/usage` with Claude Code's sign-in (asked every
 ten minutes, at most every two when refreshed; offline, again within a
 minute; backing off after the server fails; never refreshing the sign-in);
-ChatGPT's are read from Codex's own logs. Turned off, nothing runs.
+ChatGPT's from `chatgpt.com/backend-api/wham/usage` with Codex's sign-in (as
+often as Claude's; when that fails, from Codex's own logs). Turned off,
+nothing runs.
 
 | Member | Signature | |
 |---|---|---|

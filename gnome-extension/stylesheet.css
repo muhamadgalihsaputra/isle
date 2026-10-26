@@ -141,6 +141,7 @@
 .isle-compact-slot { width: 24px; }
 
 .isle-compact-clock { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.isle-compact-clock-box { spacing: 6px; }
 
 /* Inside the top bar everything is sized like the bar's own text. */
 .isle-compact-in-bar .isle-compact-row { padding: 0 14px; spacing: 10px; }
@@ -227,6 +228,17 @@
     background-color: rgba(255, 255, 255, 0.08);
 }
 .isle-peek-actions { spacing: 8px; padding-top: 9px; }
+/* The × on an alert's icon under the pointer (widgets.js `cornerClose`), as macOS's notifications have. */
+.isle-corner-close {
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.85);
+  background-color: #3a3a3c;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.isle-corner-close:hover { color: #ffffff; background-color: #4a4a4e; }
+.isle-corner-close:active { background-color: #5a5a5e; }
 .isle-peek-action { font-size: 12px; padding: 5px 14px; }
 .isle-peek-answered { spacing: 6px; padding-top: 9px; }
 .isle-peek-answered-text { font-size: 12px; font-weight: 600; }
@@ -760,6 +772,8 @@
 .isle-dnd-toggle { padding: 6px; border-radius: 999px; color: rgba(255, 255, 255, 0.6); }
 .isle-dnd-toggle:checked { color: #ffffff; background-color: #5e5ce6; }
 .isle-dnd-toggle:checked:hover { background-color: #6e6cf0; }
+.isle-notifications-dnd-note { spacing: 6px; padding: 0 10px 8px 10px; }
+.isle-notifications-dnd-text { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
 .isle-notification-list { spacing: 2px; }
 
 /* A row each, as a list: the app's icon, who in white and what in grey on one line, then when. */

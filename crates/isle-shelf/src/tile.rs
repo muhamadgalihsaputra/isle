@@ -61,6 +61,7 @@ pub fn new(item: &Item, fresh: bool, on_remove: impl Fn(String) + 'static) -> gt
 
     let copied = gtk::Box::builder()
         .css_classes(["copied"])
+        .hexpand(false)
         .halign(gtk::Align::Fill)
         .valign(gtk::Align::Fill)
         .can_target(false)
@@ -141,6 +142,8 @@ fn preview_square(classes: &[&str]) -> gtk::Box {
     gtk::Box::builder()
         .width_request(PREVIEW_SIZE)
         .height_request(PREVIEW_SIZE)
+        // Its icon expands within it only (see `tile_box`).
+        .hexpand(false)
         .halign(gtk::Align::Center)
         .valign(gtk::Align::End)
         // Clips the thumbnail to the rounded corners.
@@ -188,10 +191,13 @@ fn tile_box(frame: &gtk::Overlay, name: &str, fresh: bool) -> gtk::Box {
         .halign(gtk::Align::Center)
         .css_classes(["name"])
         .build();
+    // Never wider than that: set outright, so the icon's expanding (to centre it) can't reach the
+    // row and give one tile all the room left over.
     let tile = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(4)
         .width_request(TILE_WIDTH)
+        .hexpand(false)
         .valign(gtk::Align::Center)
         .css_classes(["tile"])
         .build();

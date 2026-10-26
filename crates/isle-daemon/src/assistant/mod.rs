@@ -342,6 +342,22 @@ impl AssistantService {
             .send(command)
             .map_err(|_| fdo::Error::Failed("the assistant stopped".into()))
     }
+
+    /// A new request while one is answered would wait unseen behind it (see `hold`): refused, so the island
+    /// says so. A typed one may replace what is still being turned into text.
+    fn free_for(&self, typed: bool) -> fdo::Result<()> {
+        let busy = match self.state.phase {
+            Phase::Thinking | Phase::Acting => true,
+            Phase::Transcribing => !typed,
+            _ => false,
+        };
+        if busy {
+            return Err(fdo::Error::Failed(
+                "Isle is still answering the last request".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn context(json: &str) -> fdo::Result<Context> {
@@ -370,6 +386,7 @@ impl AssistantService {
         #[zbus(header)] header: Header<'_>,
     ) -> fdo::Result<()> {
         crate::caller::shell_only(connection, &header).await?;
+        self.free_for(false)?;
         self.send(Command::Listen(Box::new(context(context_json)?)))
     }
 
@@ -393,6 +410,7 @@ impl AssistantService {
         #[zbus(header)] header: Header<'_>,
     ) -> fdo::Result<()> {
         crate::caller::shell_only(connection, &header).await?;
+        self.free_for(true)?;
         self.send(Command::Ask(
             text.to_owned(),
             Box::new(context(context_json)?),
@@ -687,7 +705,10 @@ impl Session {
              performa); check it first with powerprofilesctl get when asked which it is. Without \
              powerprofilesctl, the mode lives elsewhere: cat /sys/firmware/acpi/platform_profile (and \
              platform_profile_choices), systemctl status auto-cpufreq, tlp-stat -s, cat \
-             /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; look there before you answer\n\
+             /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor; look there before you answer. To \
+             switch it, always use power_mode, never a command of your own; only if power_mode says \
+             power-profiles-daemon is missing, offer a run command such as echo performance | sudo tee \
+             /sys/firmware/acpi/platform_profile (sudo does not reach a > redirect)\n\
              - open_file {{path}}: open a file in its app; reveal_file {{path}}: show it selected in Files\n\
              - chrome_profile {{profile}}: open Chrome in a profile, by its folder (\"Profile 2\")\n\
              You are an agent: to look something up on this computer, search it yourself with these, which \
@@ -1524,11 +1545,18 @@ async fn record(
     };
     let mut endpointer = Endpointer::new();
     let mut audio = Vec::with_capacity(mic::RATE as usize * 8);
+    // A microphone that sends nothing (suspended, its Bluetooth profile switching) would listen forever.
+    let silence = tokio::time::sleep(NO_AUDIO_TIMEOUT);
+    tokio::pin!(silence);
     let mut loudest = 0f32;
     // Said once a recording, not twenty times a second.
     let mut level_failed = false;
     loop {
         tokio::select! {
+            () = &mut silence, if audio.is_empty() => {
+                warn!("the microphone sent nothing in {NO_AUDIO_TIMEOUT:?}");
+                return Ok(Recorded::NoMic);
+            }
             chunk = mic.chunk() => {
                 let Some(chunk) = chunk else { break };
                 let level = rms(&chunk);
@@ -1638,6 +1666,9 @@ async fn drive<T>(
         }
     }
 }
+
+/// How long a recording waits for its first sound from the microphone before saying there is none.
+const NO_AUDIO_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Waits for `future` unless the request is cancelled; the island closing (End) leaves it running.
 async fn until_cancelled<T>(

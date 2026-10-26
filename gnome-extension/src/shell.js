@@ -198,8 +198,13 @@ export class OsdHook {
             const original = manager[name];
             // Left in place under another extension's wrapper once Isle stops: then it only passes through.
             const hook = function (...args) {
-                if (!self._destroyed && handled(...args))
-                    return;
+                // Isle failing must not take GNOME's own OSD with it.
+                try {
+                    if (!self._destroyed && handled(...args))
+                        return;
+                } catch (e) {
+                    console.warn(`Isle: could not show the OSD: ${e.message}`);
+                }
                 original.apply(this, args);
             };
             // Set when another extension wrapped it before us.

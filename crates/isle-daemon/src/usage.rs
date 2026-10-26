@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! AI plan usage for the island: Claude's limits, from the endpoint Claude Code's /usage reads (with its
-//! sign-in), and ChatGPT's, from what Codex writes in its session logs. Warns once as a limit nears.
+//! AI plan usage for the island: Claude's limits, from the endpoint Claude Code's /usage reads, and
+//! ChatGPT's, from the one Codex's /status reads (each with its own sign-in), or else from what Codex
+//! writes in its session logs. Warns once as a limit nears.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -43,6 +44,8 @@ const CLAUDE_AT_MOST: Duration = Duration::from_secs(2 * 60);
 const CLAUDE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Only Codex's newest session logs are looked at.
 const CODEX_FILES: usize = 8;
+/// Where Codex's /status reads the plan and its limits.
+const CODEX_USAGE: &str = "https://chatgpt.com/backend-api/wham/usage";
 
 #[derive(Debug, Clone, Default, Serialize, PartialEq)]
 pub struct Usage {
@@ -220,12 +223,12 @@ pub async fn run(iface: InterfaceRef<UsageService>, refresh: Arc<Notify>) {
         }
         if config.codex && paused && !forced {
             // Locked, nobody sees them: the last numbers stand until unlocking wakes the loop.
-            providers.extend(codex.last.clone());
+            providers.extend(codex.shown.clone());
         } else if config.codex {
-            // Reading logs is file work: done on a blocking thread, as Claude's request is.
+            // File work and a request: done on a blocking thread, as Claude's request is.
             let mut reader = std::mem::take(&mut codex);
             if let Ok((back, read)) = tokio::task::spawn_blocking(move || {
-                let read = reader.read();
+                let read = reader.read(forced, paused);
                 (reader, read)
             })
             .await
@@ -522,16 +525,44 @@ fn claude_windows(response: &Value) -> Vec<Window> {
     .collect()
 }
 
-/// ChatGPT's limits as Codex last saw them, read again only when its newest log changed.
+/// ChatGPT's plan and limits: asked as Codex's /status does, as often as Claude's, and in between as Codex
+/// last saw them in its logs (read again only when its newest log changed).
 #[derive(Default)]
 struct CodexReader {
     seen: Option<(PathBuf, std::time::SystemTime)>,
     last: Option<Provider>,
+    live: Option<Provider>,
+    asked: Option<Instant>,
+    /// What `read` gave last, shown again while the screen is locked.
+    shown: Option<Provider>,
 }
 
 impl CodexReader {
-    /// `None` without Codex, or before it saw any limits. Both the user's Codex and Isle's are looked at.
-    fn read(&mut self) -> Option<Provider> {
+    /// The newest of what ChatGPT said and what Codex logged, with the plan as ChatGPT says it now (an
+    /// upgrade shows at once); `None` without Codex. `forced`: the page opened; `paused`: the screen is locked.
+    fn read(&mut self, forced: bool, paused: bool) -> Option<Provider> {
+        let due = |every| self.asked.is_none_or(|at: Instant| at.elapsed() >= every);
+        if (forced && due(CLAUDE_AT_MOST)) || (!paused && due(CLAUDE_EVERY)) {
+            self.asked = Some(Instant::now());
+            // Failed (offline, signed out), the last answer stands and the logs fill in.
+            if let Some(fresh) = read_codex_live() {
+                self.live = Some(fresh);
+            }
+        }
+        let logged = self.read_logs();
+        self.shown = match (self.live.clone(), logged) {
+            (Some(live), Some(logged)) if logged.updated_ms > live.updated_ms => Some(Provider {
+                plan: live.plan,
+                ..logged
+            }),
+            (Some(live), _) => Some(live),
+            (None, logged) => logged,
+        };
+        self.shown.clone()
+    }
+
+    /// The limits in Codex's newest logs. Both the user's Codex and Isle's are looked at.
+    fn read_logs(&mut self) -> Option<Provider> {
         // Each folder's newest, so a long history of the user's own never hides Isle's fresh ones.
         let mut files = Vec::new();
         for sessions in [
@@ -556,6 +587,51 @@ impl CodexReader {
             .take(CODEX_FILES)
             .find_map(|file| codex_limits(file));
         self.last.clone()
+    }
+}
+
+/// ChatGPT's plan and limits now, with Codex's sign-in (read, never refreshed: that is Codex's to do);
+/// `None` when signed out, offline or refused.
+fn read_codex_live() -> Option<Provider> {
+    let text = std::fs::read_to_string(crate::assistant::codex_home().join("auth.json")).ok()?;
+    let sign_in: Value = serde_json::from_str(&text).ok()?;
+    let token = sign_in["tokens"]["access_token"].as_str()?;
+    let mut request = crate::http::get(CODEX_USAGE, CLAUDE_TIMEOUT)
+        .header("Authorization", &format!("Bearer {token}"))
+        // Said plainly who asks, never another app.
+        .header("User-Agent", concat!("Isle/", env!("CARGO_PKG_VERSION")));
+    if let Some(account) = sign_in["tokens"]["account_id"].as_str() {
+        request = request.header("ChatGPT-Account-Id", account);
+    }
+    let response: Value = request
+        .call()
+        .and_then(|mut reply| reply.body_mut().read_json())
+        .map_err(|err| warn!("could not read ChatGPT's usage: {err}"))
+        .ok()?;
+    Some(codex_live(&response, now_ms()))
+}
+
+/// The answer of ChatGPT's usage endpoint as a provider read at `now`.
+fn codex_live(response: &Value, now: i64) -> Provider {
+    let limits = &response["rate_limit"];
+    let windows = ["primary_window", "secondary_window"]
+        .iter()
+        .filter_map(|key| {
+            let window = limits.get(*key).filter(|w| !w.is_null())?;
+            Some(Window {
+                label: window_label(window["limit_window_seconds"].as_i64().unwrap_or(0) / 60),
+                percent: window["used_percent"].as_f64()?,
+                resets_at_ms: window["reset_at"].as_i64().map_or(0, |s| s * 1000),
+            })
+        })
+        .collect();
+    Provider {
+        id: "codex".into(),
+        name: "ChatGPT".into(),
+        plan: plan_name(response["plan_type"].as_str().unwrap_or_default()),
+        windows,
+        updated_ms: now,
+        note: String::new(),
     }
 }
 
@@ -616,21 +692,24 @@ fn codex_windows(limits: &Value) -> Vec<Window> {
         .iter()
         .filter_map(|key| {
             let window = limits.get(*key).filter(|w| !w.is_null())?;
-            let minutes = window["window_minutes"].as_i64().unwrap_or(0);
-            let label = match minutes {
-                300 => "5 hours".to_owned(),
-                10080 => "Week".to_owned(),
-                m if m > 0 && m % 1440 == 0 => format!("{} days", m / 1440),
-                m if m > 0 => format!("{} hours", (m + 30) / 60),
-                _ => "Limit".to_owned(),
-            };
             Some(Window {
-                label,
+                label: window_label(window["window_minutes"].as_i64().unwrap_or(0)),
                 percent: window["used_percent"].as_f64()?,
                 resets_at_ms: window["resets_at"].as_i64().map_or(0, |s| s * 1000),
             })
         })
         .collect()
+}
+
+/// A window of `minutes` as people say it: "5 hours", "Week", "30 days".
+fn window_label(minutes: i64) -> String {
+    match minutes {
+        300 => "5 hours".to_owned(),
+        10080 => "Week".to_owned(),
+        m if m > 0 && m % 1440 == 0 => format!("{} days", m / 1440),
+        m if m > 0 => format!("{} hours", (m + 30) / 60),
+        _ => "Limit".to_owned(),
+    }
 }
 
 /// The first value under `key`, at any depth.
@@ -675,6 +754,34 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn reads_chatgpts_plan_and_limits_as_status_does() {
+        // A free account, as the endpoint answered on 2026-10-26: one 30-day window.
+        let free = json!({"plan_type": "free", "rate_limit": {"allowed": true, "limit_reached": false,
+            "primary_window": {"used_percent": 82, "limit_window_seconds": 2_592_000,
+                "reset_after_seconds": 2_464_312, "reset_at": 1_795_444_424},
+            "secondary_window": null}});
+        let codex = codex_live(&free, 1_000);
+        assert_eq!((codex.id.as_str(), codex.plan.as_str()), ("codex", "Free"));
+        assert_eq!(codex.updated_ms, 1_000);
+        assert_eq!(
+            codex.windows,
+            [Window {
+                label: "30 days".into(),
+                percent: 82.0,
+                resets_at_ms: 1_795_444_424_000
+            }]
+        );
+        // A paid one: 5 hours and a week.
+        let pro = json!({"plan_type": "prolite", "rate_limit": {
+            "primary_window": {"used_percent": 5, "limit_window_seconds": 18_000, "reset_at": 10},
+            "secondary_window": {"used_percent": 23, "limit_window_seconds": 604_800, "reset_at": 20}}});
+        let codex = codex_live(&pro, 0);
+        assert_eq!(codex.plan, "Pro Lite");
+        let labels: Vec<&str> = codex.windows.iter().map(|w| w.label.as_str()).collect();
+        assert_eq!(labels, ["5 hours", "Week"]);
+    }
 
     #[test]
     fn sleeps_until_something_is_due() {
