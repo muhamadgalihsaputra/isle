@@ -7,15 +7,17 @@ Tasks follow dependency order. A task is complete when its acceptance criteria a
 - [ ] Define the assistant adapter boundary for start, warm, prompt, stream, stop, and conversation continuation.
 - [x] Define MCP tool groups, permission categories, credential handling, and the daemon-to-MCP bridge.
 - [x] Document setup and troubleshooting for Hermes, Oh My Pi, BYOK, and MCP clients.
-- [ ] Finish Hermes/BYOK streaming, cancellation, and operational validation.
+- [x] Hermes/BYOK streaming and cancellation: API answers stream as SSE deltas into the draft view, and dropping the request (Cancel) stops the remote request instead of letting it run to completion in the background. Operational validation against live backends still pending (see 9).
+- [ ] Finish Hermes/BYOK operational validation.
 
 ## 2. Hermes runtime
 
 Depends on: 1.
 
 - [x] Add Hermes as a selectable assistant backend, using its OpenAI-compatible local API.
-- [ ] Map streamed drafts, tool activity, errors, follow-ups, and cancellation to Isle's assistant state (API adapter currently returns complete replies).
+- [x] Map streamed drafts, tool activity, errors, follow-ups, and cancellation to Isle's assistant state. API answers stream as SSE deltas into the draft view; cancelling drops the request and closes its connection.
 - [x] Supply Isle-specific system instructions while preserving Hermes' own personality and memory files.
+- [x] Keep Hermes conversation history across daemon restarts (private per-provider history file under the data directory).
 
 Acceptance: a user can select Hermes, complete a multi-step desktop task, see progress, stop a run, and continue a conversation.
 
@@ -92,7 +94,8 @@ Acceptance: the user and authorized agents can manage entries, and records survi
 Depends on: 2–8.
 
 - [x] Include the MCP Python runtime and server in supported install/package flows.
-- [ ] Document operational validation and cancellation behavior for Hermes and BYOK.
+- [ ] Document operational validation for Hermes and BYOK.
+- [x] Document cancellation behavior for Hermes and BYOK (dropping the request stops the remote SSE stream and closes its connection).
 - [x] Document custom instructions, MCP client configuration and permissions, prayer settings, and calorie data location.
 - [x] Update product documentation and diagnostics to report configured/available backends and MCP server status without revealing secrets.
 

@@ -1,12 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! OpenAI-compatible chat completions used for Hermes' local API and user-configured endpoints.
+//!
+//! Unlike the first version of this client, which waited for the whole reply,
+//! answers stream: each server-sent delta is forwarded to the draft view as it
+//! arrives, and the full text is parsed into an [`Answer`] only once complete.
+//! Cancelling works the same way the rest of the assistant cancels: dropping
+//! the [`Client::ask`] future (see `until_cancelled`) drops a guard that sets
+//! a flag the streaming reader checks between lines, so the request stops and
+//! its connection closes instead of running to completion in the background.
+//! A stalled server mid-stream still blocks one reader thread until the
+//! server sends more or the connection dies; there is no per-read timeout
+//! because a total body budget would also cut off legitimately long answers.
+
+use std::io::{BufRead, BufReader};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, bail};
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::answer::{Answer, SCHEMA};
+
+/// Sets the shared cancel flag when dropped: the streaming reader in the
+/// blocking task checks it between lines, so dropping the `ask` future
+/// (the assistant's cancel path) stops the remote request.
+struct CancelOnDrop(Arc<AtomicBool>);
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
 
 #[derive(Clone)]
 pub struct Client {
@@ -42,7 +68,7 @@ impl Client {
             api_key: key,
             model: model.to_owned(),
             instructions: instructions.to_owned(),
-            history: Vec::new(),
+            history: load_history("hermes"),
             hermes_mode: true,
         })
     }
@@ -72,7 +98,7 @@ impl Client {
             api_key,
             model: model.to_owned(),
             instructions: instructions.to_owned(),
-            history: Vec::new(),
+            history: load_history("openai"),
             hermes_mode: false,
         })
     }
@@ -83,23 +109,27 @@ impl Client {
         activity: Option<&UnboundedSender<String>>,
         draft: Option<&UnboundedSender<String>>,
     ) -> anyhow::Result<Answer> {
+        // Held by this future: dropping it (cancel) sets the flag the
+        // streaming reader checks, so the remote request stops.
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _cancel_guard = CancelOnDrop(cancel.clone());
         let this = self.clone();
         let prompt = prompt.to_owned();
         let request_prompt = prompt.clone();
-        let response =
-            tokio::task::spawn_blocking(move || this.complete(&request_prompt)).await??;
-        let content = response["choices"][0]["message"]["content"]
-            .as_str()
-            .ok_or_else(|| anyhow::anyhow!("API response has no assistant message"))?
-            .to_owned();
+        let draft_tx = draft.cloned();
+        let content = tokio::task::spawn_blocking(move || {
+            this.stream_complete(&request_prompt, draft_tx.as_ref(), &cancel)
+        })
+        .await??;
         self.history.push(json!({"role":"user","content":prompt}));
         self.history
             .push(json!({"role":"assistant","content":content}));
         if self.history.len() > 60 {
             self.history.drain(..self.history.len() - 60);
         }
+        self.save_history();
         if let Some(draft) = draft {
-            draft.send(content.clone()).ok();
+            draft.send(String::new()).ok();
         }
         if let Some(activity) = activity {
             activity.send(String::new()).ok();
@@ -107,12 +137,32 @@ impl Client {
         Ok(super::answer::from_text(&content))
     }
 
-    fn complete(&self, prompt: &str) -> anyhow::Result<Value> {
+    fn save_history(&self) {
+        let kind = if self.hermes_mode { "hermes" } else { "openai" };
+        let path = history_path(kind);
+        if crate::store::create_private_dir(&crate::store::data_dir()).is_ok() {
+            if let Ok(text) = serde_json::to_string(&self.history) {
+                let _ = crate::store::write_private(&path, text.as_bytes());
+            }
+        }
+    }
+
+    /// Streams one chat completion, forwarding each text delta to the draft
+    /// view as it arrives. Runs on a blocking thread: the response body is a
+    /// synchronous reader, and the caller's cancel flag is checked between
+    /// lines. Returns the full accumulated text; parsing into an [`Answer`]
+    /// happens in [`Client::ask`] once complete.
+    fn stream_complete(
+        &self,
+        prompt: &str,
+        draft: Option<&UnboundedSender<String>>,
+        cancel: &AtomicBool,
+    ) -> anyhow::Result<String> {
         if self.hermes_mode {
             self.ensure_hermes_toolless()?;
         }
         let base = self.base_url.trim_end_matches('/');
-        let url = if base.ends_with("/chat/completions") {
+        let urls = if base.ends_with("/chat/completions") {
             vec![base.to_owned()]
         } else if base.ends_with("/v1") {
             vec![format!("{base}/chat/completions")]
@@ -129,18 +179,28 @@ impl Client {
         let mut messages = vec![json!({"role":"system","content":system})];
         messages.extend(self.history.iter().cloned());
         messages.push(json!({"role":"user","content":prompt}));
-        let body = json!({"model": self.model, "stream": false,
+        let body = json!({"model": self.model, "stream": true,
             "messages": messages,
             "response_format":{"type":"json_object"}});
         let mut last_error = None;
-        for url in url {
+        for url in urls {
             match ureq::post(&url)
                 .header("Authorization", &format!("Bearer {}", self.api_key))
                 .header("Content-Type", "application/json")
                 .send_json(body.clone())
-                .and_then(|response| response.into_body().read_json::<Value>())
             {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    let reader = response.into_body().into_reader();
+                    let accumulated = accumulate_sse(BufReader::new(reader), cancel, |text| {
+                        if let Some(draft) = draft {
+                            draft.send(text.to_owned()).ok();
+                        }
+                    })?;
+                    if accumulated.trim().is_empty() {
+                        bail!("API returned no answer");
+                    }
+                    return Ok(accumulated);
+                }
                 Err(error) => last_error = Some(error),
             }
         }
@@ -222,6 +282,76 @@ impl Client {
     }
 }
 
+/// Reads one server-sent-events stream, appending each
+/// `choices[0].delta.content` to the accumulated text and calling `on_delta`
+/// with the whole text after every delta, so the draft view updates live.
+/// Stops at `data: [DONE]` or end of stream; a data line that is not valid
+/// JSON fails, so a provider that does not speak SSE surfaces at once
+/// instead of producing a garbled reply. `cancel` is checked between lines:
+/// a set flag aborts the read and drops the connection.
+fn accumulate_sse<R: BufRead>(
+    reader: R,
+    cancel: &AtomicBool,
+    mut on_delta: impl FnMut(&str),
+) -> anyhow::Result<String> {
+    let mut accumulated = String::new();
+    for line in reader.lines() {
+        if cancel.load(Ordering::SeqCst) {
+            bail!("request cancelled");
+        }
+        let line = line.context("could not read streamed reply")?;
+        let line = line.trim();
+        if line.is_empty() || line.starts_with(':') {
+            continue;
+        }
+        let Some(data) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data == "[DONE]" {
+            break;
+        }
+        let event: Value = serde_json::from_str(data)
+            .with_context(|| format!("streamed reply is not valid SSE JSON: {data}"))?;
+        if let Some(delta) = event["choices"][0]["delta"]["content"].as_str() {
+            if !delta.is_empty() {
+                accumulated.push_str(delta);
+                on_delta(&accumulated);
+            }
+        }
+    }
+    if cancel.load(Ordering::SeqCst) {
+        bail!("request cancelled");
+    }
+    Ok(accumulated)
+}
+
+/// Conversation history for one API provider, kept across daemon restarts so
+/// a conversation continues instead of starting over. Best effort: a missing
+/// or malformed file just means starting fresh, and a failed save never fails
+/// the answer it belongs to. The file holds user prompts, so it lives under
+/// the private data directory with mode 0600 (see `store`).
+fn history_path(kind: &str) -> std::path::PathBuf {
+    crate::store::data_dir().join(format!("assistant-history-{kind}.json"))
+}
+
+fn load_history(kind: &str) -> Vec<Value> {
+    let Ok(text) = std::fs::read_to_string(history_path(kind)) else {
+        return Vec::new();
+    };
+    let Ok(Value::Array(items)) = serde_json::from_str(&text) else {
+        return Vec::new();
+    };
+    let mut history: Vec<Value> = items
+        .into_iter()
+        .filter(|item| item["role"].is_string() && item["content"].is_string())
+        .collect();
+    if history.len() > 60 {
+        history.drain(..history.len() - 60);
+    }
+    history
+}
+
 pub fn byok_configured() -> bool {
     config_value("ISLE_OPENAI_BASE_URL").is_some() && config_value("ISLE_OPENAI_API_KEY").is_some()
 }
@@ -255,4 +385,61 @@ fn config_value(name: &str) -> Option<String> {
             (key.trim() == name).then(|| value.trim().trim_matches(['\"', '\'']).to_owned())
         })
         .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn streamed(text: &str) -> String {
+        let cancel = AtomicBool::new(false);
+        let mut drafts = Vec::new();
+        let out = accumulate_sse(Cursor::new(text), &cancel, |draft| {
+            drafts.push(draft.to_owned());
+        })
+        .unwrap();
+        assert_eq!(drafts.last().map(String::as_str), Some(out.as_str()));
+        out
+    }
+
+    #[test]
+    fn sse_deltas_accumulate_and_done_stops() {
+        let out = streamed(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"say\\\": \"}}]}\n\n\
+             data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\
+             : keep-alive\n\
+             data: [DONE]\n\
+             data: {\"choices\":[{\"delta\":{\"content\":\"ignored\"}}]}\n",
+        );
+        assert_eq!(out, "{\"say\": hi");
+    }
+
+    #[test]
+    fn sse_ignores_lines_without_content() {
+        let out = streamed(
+            "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\
+             data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n",
+        );
+        assert_eq!(out, "ok");
+    }
+
+    #[test]
+    fn sse_bad_json_fails() {
+        let cancel = AtomicBool::new(false);
+        let err = accumulate_sse(Cursor::new("data: not json\n"), &cancel, |_| {}).unwrap_err();
+        assert!(err.to_string().contains("not valid SSE JSON"));
+    }
+
+    #[test]
+    fn sse_cancelled_flag_aborts() {
+        let cancel = AtomicBool::new(true);
+        let err = accumulate_sse(
+            Cursor::new("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n"),
+            &cancel,
+            |_| {},
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), "request cancelled");
+    }
 }
