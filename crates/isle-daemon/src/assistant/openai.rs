@@ -357,12 +357,42 @@ pub fn byok_configured() -> bool {
 }
 
 pub fn discover(provider: &str) -> anyhow::Result<Vec<String>> {
+    if provider == "oh-my-pi" {
+        return discover_omp_models();
+    }
     let client = match provider {
         "hermes" => Client::hermes("", ""),
         "openai-compatible" => Client::byok("", ""),
         _ => bail!("model discovery is only available for API providers"),
     }?;
     client.models()
+}
+
+/// Lists OMP's catalog through a throwaway RPC session: the same startup
+/// path the assistant itself uses, dropped (and its session dir removed)
+/// once the catalog is read. Runs on its own thread-local runtime because
+/// discovery is called from blocking code (the ListModels D-Bus method).
+/// A failure here only empties the picker; the free-text model entry still
+/// accepts a provider/model id by hand.
+fn discover_omp_models() -> anyhow::Result<Vec<String>> {
+    let program = super::brain::Provider::OhMyPi
+        .program()
+        .ok_or_else(|| anyhow::anyhow!("Oh My Pi is not installed"))?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("could not start a runtime for OMP model discovery")?;
+    runtime.block_on(async move {
+        let workspace = crate::store::data_dir().join("assistant");
+        let mut omp = super::omp::Omp::start(&program, "", None, &workspace, "").await?;
+        let models = omp.models().await;
+        let dir = omp.conversation();
+        drop(omp);
+        if let Some(dir) = dir {
+            super::omp::Omp::forget(&dir);
+        }
+        models
+    })
 }
 
 fn config_value(name: &str) -> Option<String> {

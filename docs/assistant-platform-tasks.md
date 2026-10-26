@@ -4,7 +4,7 @@ Tasks follow dependency order. A task is complete when its acceptance criteria a
 
 ## 1. Specify interfaces and document runtime setup
 
-- [ ] Define the assistant adapter boundary for start, warm, prompt, stream, stop, and conversation continuation.
+- [x] Define the assistant adapter boundary for start, warm, prompt, stream, stop, and conversation continuation (see [assistant-adapter-boundary.md](assistant-adapter-boundary.md); the boundary is the `Brain` enum's contract, not a new trait — a trait refactor across five providers would churn code for no behavior gain).
 - [x] Define MCP tool groups, permission categories, credential handling, and the daemon-to-MCP bridge.
 - [x] Document setup and troubleshooting for Hermes, Oh My Pi, BYOK, and MCP clients.
 - [x] Hermes/BYOK streaming and cancellation: API answers stream as SSE deltas into the draft view, and dropping the request (Cancel) stops the remote request instead of letting it run to completion in the background. Operational validation against live backends still pending (see 9).
@@ -51,10 +51,11 @@ Depends on: 1 and 3.
 - [x] Add Oh My Pi as a selectable runtime over RPC.
 - [x] Map streamed messages, tool events, approvals, cancellation, errors, and conversation continuation into Isle. OMP native tools stay disabled; Isle actions use its own approvals.
 - [x] Apply custom coding-agent instructions using OMP's supported prompt/configuration interface.
+- [x] Fetch OMP's full model catalog for the settings picker via RPC `get_available_models` (values are `provider/id`, as the model entry documents).
 
 Acceptance: OMP can complete the same desktop task flow as Hermes through Isle's existing action/approval surface.
 
-Runtime acceptance still needs an installed OMP account and an interactive run; the focused local checks only compile the adapter.
+Runtime acceptance still needs an installed OMP account and an interactive run; the focused local checks only compile the adapter and test catalog parsing.
 
 ## 6. Direct OpenAI-compatible BYOK
 

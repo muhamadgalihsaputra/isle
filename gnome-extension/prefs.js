@@ -762,7 +762,7 @@ const AI_PROVIDERS = [
     {
         id: 'oh-my-pi', name: 'Oh My Pi', command: 'omp', modelKey: 'voice-omp-model',
         about: 'Oh My Pi coding agent, with its own provider settings and Isle desktop actions',
-        models: () => [['', 'Oh My Pi default']],
+        models: () => [['', 'Oh My Pi default'], ...apiModels('oh-my-pi').map(id => [id, id])],
     },
 ];
 

@@ -216,6 +216,23 @@ impl Omp {
         Some(self.session_dir.to_string_lossy().into_owned())
     }
 
+    /// Lists OMP's available models via `get_available_models` (see the
+    /// Oh My Pi RPC reference): the command waits for background model
+    /// discovery before returning. Values are `provider/id`, the format the
+    /// assistant settings entry already documents for OMP's model field.
+    pub async fn models(&mut self) -> anyhow::Result<Vec<String>> {
+        let response = self
+            .command(json!({"type": "get_available_models"}))
+            .await?;
+        if response["success"] != true {
+            bail!(
+                "Oh My Pi could not list models: {}",
+                response["error"].as_str().unwrap_or("unknown error")
+            );
+        }
+        Ok(parse_available_models(&response))
+    }
+
     pub fn forget(id: &str) {
         let path = PathBuf::from(id);
         let owned = crate::store::data_dir().join("assistant");
@@ -230,6 +247,31 @@ impl Omp {
     }
 }
 
+/// Reads a `get_available_models` response into picker values. The wire
+/// schema wraps the catalog as `data.models` of `ModelInfo` records
+/// (`provider`, `id`, `name`, ...); a bare array is accepted too, so an older
+/// server shape still yields a list instead of an error. Entries without an
+/// id are skipped; the value is `provider/id` when a provider is present.
+fn parse_available_models(response: &Value) -> Vec<String> {
+    let models = response["data"]["models"]
+        .as_array()
+        .or_else(|| response["data"].as_array())
+        .or_else(|| response["models"].as_array());
+    let Some(models) = models else {
+        return Vec::new();
+    };
+    models
+        .iter()
+        .filter_map(|model| {
+            let id = model["id"].as_str().filter(|id| !id.is_empty())?;
+            Some(match model["provider"].as_str().filter(|p| !p.is_empty()) {
+                Some(provider) => format!("{provider}/{id}"),
+                None => id.to_owned(),
+            })
+        })
+        .collect()
+}
+
 fn message_text(message: &Value) -> String {
     match &message["content"] {
         Value::String(text) => text.clone(),
@@ -238,5 +280,38 @@ fn message_text(message: &Value) -> String {
             .filter_map(|part| part["text"].as_str())
             .collect(),
         _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_the_wire_catalog_shape() {
+        let response = json!({
+            "type": "response", "id": "isle-1", "command": "get_available_models", "success": true,
+            "data": {"models": [
+                {"id": "claude-sonnet-4-5", "name": "Claude Sonnet", "api": "anthropic",
+                 "provider": "anthropic", "baseUrl": "", "reasoning": false, "input": ["text"],
+                 "contextWindow": null, "maxTokens": null},
+                {"id": "gpt-5", "name": "GPT-5", "api": "openai", "provider": "openai",
+                 "baseUrl": "", "reasoning": false, "input": ["text"],
+                 "contextWindow": null, "maxTokens": null},
+                {"name": "No id, skipped", "provider": "anthropic"}
+            ]}
+        });
+        assert_eq!(
+            parse_available_models(&response),
+            ["anthropic/claude-sonnet-4-5", "openai/gpt-5"]
+        );
+    }
+
+    #[test]
+    fn parses_a_bare_array_and_ignores_unknown_shapes() {
+        let bare = json!({"data": [{"id": "x-1"}]});
+        assert_eq!(parse_available_models(&bare), ["x-1"]);
+        assert!(parse_available_models(&json!({"data": {}})).is_empty());
+        assert!(parse_available_models(&json!({})).is_empty());
     }
 }
