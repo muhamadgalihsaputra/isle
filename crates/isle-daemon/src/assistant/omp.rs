@@ -49,15 +49,14 @@ impl Omp {
             });
         std::fs::create_dir_all(&session_dir)?;
         let mut command = Command::new(program);
+        // OMP keeps its native tools, extensions, skills, and rules: it is
+        // Isle's agent with full access. Only --no-ui stays, because Isle
+        // cannot answer extension dialogs over RPC; it removes no tool.
         command
             .args([
                 "--mode",
                 "rpc",
                 "--no-ui",
-                "--no-tools",
-                "--no-extensions",
-                "--no-skills",
-                "--no-rules",
                 "--append-system-prompt",
                 instructions,
                 "--session-dir",

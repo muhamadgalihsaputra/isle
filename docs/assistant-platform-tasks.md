@@ -49,7 +49,7 @@ Acceptance: a compatible MCP client can list and call permitted tools; unauthori
 Depends on: 1 and 3.
 
 - [x] Add Oh My Pi as a selectable runtime over RPC.
-- [x] Map streamed messages, tool events, approvals, cancellation, errors, and conversation continuation into Isle. OMP native tools stay disabled; Isle actions use its own approvals.
+- [x] Map streamed messages, tool events, approvals, cancellation, errors, and conversation continuation into Isle. OMP keeps its native tools; the Isle actions it asks for use Isle's approvals.
 - [x] Apply custom coding-agent instructions using OMP's supported prompt/configuration interface.
 - [ ] Fetch OMP's full model catalog for the settings picker via RPC `get_available_models` (values are `provider/id`, as the model entry documents). BLOCKED live: OMP v18.12.6 refuses the full catalog ("RPC response exceeded the transport limit") and its RPC protocol has no per-provider or chunked alternative, so the picker falls back to the default plus the free-text entry. Code and catalog parsing are implemented and unit-tested; the checkbox stays open until a live OMP returns a catalog.
 

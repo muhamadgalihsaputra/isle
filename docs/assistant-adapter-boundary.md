@@ -17,8 +17,8 @@ the provider and keeps it up for the next turns until dropped.
 - CLI providers (Claude, Codex, Antigravity) spawn their process through
   `child::spawn`: its own process group, lowered priority, killed when its
   `Group` drops.
-- Oh My Pi spawns `omp --mode rpc` with its built-in tools, extensions,
-  skills, and rules disabled, then opens its session (`open_session`).
+- Oh My Pi spawns `omp --mode rpc` with its native tools, extensions,
+  skills, and rules enabled, then opens its session (`open_session`).
 - Hermes and OpenAI-compatible endpoints build an API client instead of
   a process, and load their per-provider conversation history from the
   private data directory.
