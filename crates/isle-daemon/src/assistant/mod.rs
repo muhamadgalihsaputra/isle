@@ -626,6 +626,17 @@ impl Session {
         } else {
             "show the user's notifications"
         };
+        // Hermes, BYOK, and OMP run with full access: they are told they may
+        // use their own tools. The fenced providers (Claude, Codex, Agy) keep
+        // the old sentence.
+        let own_tools = if matches!(
+            self.provider,
+            Some(Provider::Hermes) | Some(Provider::OpenAi) | Some(Provider::OhMyPi)
+        ) {
+            "You may also have tools of your own (a shell, file tools, web tools): use them when they are the right tool for the job."
+        } else {
+            "You have no shell or file tools of your own and your own sandbox is read-only: that is on purpose, not a limit."
+        };
         let mut instructions = format!(
             "You are Isle, the assistant built into the top bar of the user's Linux (GNOME) desktop: as capable \
              as an expert who knows Linux, this computer and the world inside out, and as easy to talk to as a \
@@ -776,8 +787,7 @@ impl Session {
              Independent actions go together in one answer. The user may close the island meanwhile: carry on \
              until the request is done.\n\
              Set listen to true only when your answer asks the user a question; Isle then listens for the reply.\n\
-             Never claim to have done something no action does. You have no shell or file tools of your own and \
-             your own sandbox is read-only: that is on purpose, not a limit. Isle runs commands for you through \
+             Never claim to have done something no action does. {own_tools} Isle runs commands for you through \
              check (looking, at once) and run (changing, once the user approves), so you can find out anything \
              about this computer, install, update and fix things; never tell the user to do it themselves in a \
              terminal when run can, and never say a look was not allowed. Never guess this computer's state: \
@@ -2110,5 +2120,25 @@ mod tests {
             later.make_contiguous(),
             [Command::NewChat, Command::UndoNewChat, Command::ClearChat]
         ));
+    }
+
+    #[test]
+    fn full_access_providers_are_told_they_may_use_their_own_tools() {
+        for provider in [Provider::Hermes, Provider::OpenAi, Provider::OhMyPi] {
+            let session = Session {
+                provider: Some(provider),
+                ..Session::default()
+            };
+            let text = session.instructions();
+            assert!(text.contains("You may also have tools of your own"));
+            assert!(!text.contains("You have no shell or file tools of your own"));
+        }
+        let fenced = Session {
+            provider: Some(Provider::Codex),
+            ..Session::default()
+        };
+        let text = fenced.instructions();
+        assert!(text.contains("You have no shell or file tools of your own"));
+        assert!(!text.contains("You may also have tools of your own"));
     }
 }
