@@ -221,9 +221,19 @@ impl Client {
             .into_body()
             .read_json()
             .context("Hermes API did not return toolset status")?;
+        Self::check_hermes_toolsets(&response)
+    }
+
+    /// Checks a `/v1/toolsets` response: Hermes answers either a bare array,
+    /// `{"toolsets": [...]}`, or — current versions — `{"object": "list",
+    /// "data": [...]}`. The check itself is unchanged: any enabled toolset
+    /// other than memory, with a non-empty tool list, refuses the run, so
+    /// Isle stays the only executor of desktop actions.
+    fn check_hermes_toolsets(response: &Value) -> anyhow::Result<()> {
         let toolsets = response
             .as_array()
             .or_else(|| response["toolsets"].as_array())
+            .or_else(|| response["data"].as_array())
             .ok_or_else(|| {
                 anyhow::anyhow!("Hermes API toolset response is not recognized; refusing to run")
             })?;
@@ -471,5 +481,28 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.to_string(), "request cancelled");
+    }
+
+    #[test]
+    fn toolset_check_accepts_all_three_shapes() {
+        let memory_only = json!([{"name": "memory", "enabled": true, "tools": ["recall"]}]);
+        assert!(Client::check_hermes_toolsets(&memory_only).is_ok());
+        let wrapped = json!({"toolsets": [{"name": "memory", "enabled": true, "tools": []}]});
+        assert!(Client::check_hermes_toolsets(&wrapped).is_ok());
+        // Current Hermes versions answer {"object": "list", "data": [...]}.
+        let listed = json!({"object": "list", "platform": "api_server", "data": [{"name": "memory", "enabled": true, "tools": ["recall"]}]});
+        assert!(Client::check_hermes_toolsets(&listed).is_ok());
+    }
+
+    #[test]
+    fn toolset_check_still_refuses_non_memory_tools() {
+        let listed = json!({"object": "list", "data": [
+            {"name": "memory", "enabled": true, "tools": ["recall"]},
+            {"name": "web", "enabled": true, "tools": ["web_search"]},
+        ]});
+        let err = Client::check_hermes_toolsets(&listed).unwrap_err();
+        assert!(err.to_string().contains("non-memory native tools"));
+        assert!(Client::check_hermes_toolsets(&json!({"data": {}})).is_err());
+        assert!(Client::check_hermes_toolsets(&json!({})).is_err());
     }
 }
