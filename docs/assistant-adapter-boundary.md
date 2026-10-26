@@ -42,9 +42,9 @@ the provider and keeps it up for the next turns until dropped.
   only and sends no draft.
 - The answer is always Isle's action JSON (see `answer.rs`): every
   provider returns it, and Isle runs or asks approval for the actions.
-  No provider executes a desktop action itself. Hermes is additionally
-  fenced at the API: Isle checks `/v1/toolsets` before each answer and
-  refuses if Hermes reports any enabled non-memory toolset.
+  No provider executes a desktop action itself. Hermes connects with
+  full access: it keeps its own tools, answers as Isle's agent, and
+  Isle runs the desktop actions it asks for.
 
 ### stream
 

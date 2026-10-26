@@ -6,7 +6,7 @@ This records what is implemented in the current workspace and what still needs e
 
 ## Implemented in the workspace
 
-- Added a Hermes Agent provider using Hermes' loopback OpenAI-compatible API. Isle supplies its desktop-action instructions and checks `/v1/toolsets` before each answer. The API must be configured with only its `memory` toolset so Hermes can keep its own memory while Isle stays responsible for desktop actions.
+- Added a Hermes Agent provider using Hermes' loopback OpenAI-compatible API. Hermes connects with full access: Isle supplies its desktop-action instructions and context, Hermes answers as Isle's agent, and Isle runs the desktop actions it asks for.
 - Added Oh My Pi as a selectable RPC provider. Isle disables OMP's built-in tools, appends Isle's action instructions, forwards message drafts and tool progress, and stores OMP sessions below Isle's private data directory.
 - Added an OpenAI-compatible BYOK provider. It reads the endpoint and key from `~/.config/isle/ai.env` (mode `0600`) or the corresponding service environment variables, discovers models from `/models` or `/v1/models`, and exposes a model picker and custom instructions.
 - Added per-client MCP scopes, write-tool allowlists, auditable calls, and typed Isle tools for tasks, calendar, reminders, focus timer, media, prayer, calories, plus portal-based URL opening.

@@ -6,14 +6,7 @@ The Isle assistant can use Claude Code, Codex, Antigravity, Hermes Agent, or an 
 
 Use [Hermes' local API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server). In `~/.hermes/.env`, set `API_SERVER_ENABLED=true` and a strong `API_SERVER_KEY`, then run `hermes gateway`. Keep the API server bound to its default loopback address. Isle reads the key from that file and connects to `http://127.0.0.1:8642/v1`.
 
-Hermes' API server normally runs its own tools, including terminal and file tools. To keep tool execution in Isle, disable tools specifically for the API server in `~/.hermes/config.yaml`:
-
-```yaml
-platform_toolsets:
-  api_server: [memory]
-```
-
-This allows Hermes' own memory tools while blocking its terminal, file, and other action tools. Isle checks `/v1/toolsets` before each answer and refuses to proceed if Hermes reports any enabled non-memory toolset. The setting is per Hermes API server platform; verify it after upgrading Hermes.
+Hermes connects to Isle with full access: its own tools stay enabled, and Isle adds its desktop instructions and context to Hermes' own prompt. Hermes answers as Isle's agent, and Isle runs the desktop actions it asks for.
 
 Hermes uses its configured default model when Isle's model field is empty. Isle's extra coding-agent personality text is not applied to Hermes; Isle's system instructions are added to Hermes' own prompt.
 

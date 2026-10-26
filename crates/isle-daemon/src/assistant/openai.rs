@@ -158,9 +158,6 @@ impl Client {
         draft: Option<&UnboundedSender<String>>,
         cancel: &AtomicBool,
     ) -> anyhow::Result<String> {
-        if self.hermes_mode {
-            self.ensure_hermes_toolless()?;
-        }
         let base = self.base_url.trim_end_matches('/');
         let urls = if base.ends_with("/chat/completions") {
             vec![base.to_owned()]
@@ -208,52 +205,6 @@ impl Client {
             "OpenAI-compatible API request failed: {}",
             last_error.unwrap()
         ))
-    }
-
-    fn ensure_hermes_toolless(&self) -> anyhow::Result<()> {
-        let base = self.base_url.trim_end_matches('/');
-        let root = base.strip_suffix("/v1").unwrap_or(base);
-        let url = format!("{root}/v1/toolsets");
-        let response: Value = ureq::get(&url)
-            .header("Authorization", &format!("Bearer {}", self.api_key))
-            .call()
-            .context("could not verify Hermes API tool permissions")?
-            .into_body()
-            .read_json()
-            .context("Hermes API did not return toolset status")?;
-        Self::check_hermes_toolsets(&response)
-    }
-
-    /// Checks a `/v1/toolsets` response: Hermes answers either a bare array,
-    /// `{"toolsets": [...]}`, or — current versions — `{"object": "list",
-    /// "data": [...]}`. The check itself is unchanged: any enabled toolset
-    /// other than memory, with a non-empty tool list, refuses the run, so
-    /// Isle stays the only executor of desktop actions.
-    fn check_hermes_toolsets(response: &Value) -> anyhow::Result<()> {
-        let toolsets = response
-            .as_array()
-            .or_else(|| response["toolsets"].as_array())
-            .or_else(|| response["data"].as_array())
-            .ok_or_else(|| {
-                anyhow::anyhow!("Hermes API toolset response is not recognized; refusing to run")
-            })?;
-        for set in toolsets.iter().filter(|set| set["enabled"] == true) {
-            let name = set["name"]
-                .as_str()
-                .or_else(|| set["id"].as_str())
-                .or_else(|| set["toolset"].as_str());
-            let tools = set["tools"].as_array().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Hermes API returned an enabled toolset without its tool list; refusing to run"
-                )
-            })?;
-            if !tools.is_empty() && name != Some("memory") {
-                bail!(
-                    "Hermes API has non-memory native tools enabled. Set platform_toolsets.api_server: [memory] in ~/.hermes/config.yaml so Isle remains the only executor of desktop actions."
-                );
-            }
-        }
-        Ok(())
     }
 
     pub fn models(&self) -> anyhow::Result<Vec<String>> {
@@ -481,28 +432,5 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.to_string(), "request cancelled");
-    }
-
-    #[test]
-    fn toolset_check_accepts_all_three_shapes() {
-        let memory_only = json!([{"name": "memory", "enabled": true, "tools": ["recall"]}]);
-        assert!(Client::check_hermes_toolsets(&memory_only).is_ok());
-        let wrapped = json!({"toolsets": [{"name": "memory", "enabled": true, "tools": []}]});
-        assert!(Client::check_hermes_toolsets(&wrapped).is_ok());
-        // Current Hermes versions answer {"object": "list", "data": [...]}.
-        let listed = json!({"object": "list", "platform": "api_server", "data": [{"name": "memory", "enabled": true, "tools": ["recall"]}]});
-        assert!(Client::check_hermes_toolsets(&listed).is_ok());
-    }
-
-    #[test]
-    fn toolset_check_still_refuses_non_memory_tools() {
-        let listed = json!({"object": "list", "data": [
-            {"name": "memory", "enabled": true, "tools": ["recall"]},
-            {"name": "web", "enabled": true, "tools": ["web_search"]},
-        ]});
-        let err = Client::check_hermes_toolsets(&listed).unwrap_err();
-        assert!(err.to_string().contains("non-memory native tools"));
-        assert!(Client::check_hermes_toolsets(&json!({"data": {}})).is_err());
-        assert!(Client::check_hermes_toolsets(&json!({})).is_err());
     }
 }
