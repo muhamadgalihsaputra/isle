@@ -16,7 +16,8 @@
  * ones ("11:10" and "isle-0.9.1" would space out). */
 .isle-compact-clock, .isle-compact-second-time, .isle-header-time, .isle-recording-time,
 .isle-timer-time, .isle-stepper-value, .isle-time, .isle-volume-text, .isle-peek-value,
-.isle-call-duration, .isle-reminders-count, .isle-cal-event-time, .isle-cal-day, .isle-usage-percent {
+.isle-call-duration, .isle-reminders-count, .isle-cal-event-time, .isle-cal-day, .isle-usage-percent,
+.isle-calorie-total, .isle-calorie-kcal, .isle-prayer-card-time {
   font-feature-settings: "tnum";
 }
 
@@ -611,24 +612,46 @@
 
 /* ── Reminders ────────────────────────────────────────── */
 
-/* Reminders: an orange title and count (as large as the timer's caption beside
- * it), rows of a ring and a title over a hairline. A 24 px header and 24 px rows fill the 144 px page with five
- * whole rows, set close together. */
-.isle-reminders-header { height: 24px; padding: 0; spacing: 4px; }
-.isle-reminders-title { font-size: 17px; font-weight: 600; color: #ff9f0a; letter-spacing: -0.2px; }
-.isle-reminders-count { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; color: #ff9f0a; padding-right: 2px; }
-.isle-reminders-add { padding: 5px; border-radius: 99px; color: rgba(255, 255, 255, 0.55); }
-.isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
+/* Reminders: crisp dark/white glass with signature red accent (#ff453a). */
+.isle-reminders-header { height: 26px; padding: 0; spacing: 6px; margin-bottom: 4px; }
+.isle-reminders-title { font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: -0.3px; }
+.isle-reminders-count {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  color: #ff453a;
+  background-color: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-right: 4px;
+}
+.isle-reminders-add {
+  padding: 4px;
+  border-radius: 99px;
+  color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition-duration: 120ms;
+}
+.isle-reminders-add:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.18); }
 
 /* Lists fade out at an edge that scrolls on, instead of being cut. */
 .isle-reminder-scroll { -st-vfade-offset: 14px; }
-.isle-reminder { min-height: 24px; spacing: 10px; }
+.isle-reminder {
+  min-height: 25px;
+  spacing: 10px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  transition-duration: 120ms;
+}
+.isle-reminder:hover { background-color: rgba(255, 255, 255, 0.04); }
 /* The ring by the first line; a wrapped title gets a little air above and below. */
 .isle-reminder .isle-reminder-check { margin-top: 3px; }
 .isle-reminder-new .isle-reminder-check { margin-top: 0; }
 .isle-reminder-title-box { padding: 3px 0; }
 
-/* An 18 px ring; ticked, it turns orange with a 10 px dot inside. */
+/* An 18 px ring; ticked, it turns red with a 10 px dot inside. */
 .isle-reminder-check {
   width: 10px;
   height: 10px;
@@ -638,21 +661,21 @@
   transition-duration: 160ms;
 }
 
-.isle-reminder-check:hover { border-color: rgba(255, 255, 255, 0.6); }
-.isle-reminder-check:checked { border-color: #ff9f0a; }
+.isle-reminder-check:hover { border-color: rgba(255, 255, 255, 0.65); }
+.isle-reminder-check:checked { border-color: #ff453a; }
 .isle-reminder-check.faint { border-color: rgba(255, 255, 255, 0.14); }
-.isle-reminder-dot { border-radius: 99px; background-color: #ff9f0a; }
+.isle-reminder-dot { border-radius: 99px; background-color: #ff453a; }
 
 .isle-reminder-content { spacing: 6px; padding-right: 2px; }
 /* The hairline runs under the text, from the title to the edge. */
-.isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.1); }
+.isle-reminder-line { height: 1px; background-color: rgba(255, 255, 255, 0.08); }
 .isle-reminder-title { font-size: 13.5px; color: #ffffff; transition-duration: 200ms; }
-.isle-reminder-title.done { color: rgba(255, 255, 255, 0.38); }
+.isle-reminder-title.done { color: rgba(255, 255, 255, 0.35); }
 .isle-reminder-strike { height: 1.5px; background-color: rgba(255, 255, 255, 0.45); }
-.isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.5); }
-.isle-reminder-remove:hover { color: #ffffff; background-color: rgba(255, 255, 255, 0.1); }
+.isle-reminder-remove { padding: 3px; border-radius: 99px; color: rgba(255, 255, 255, 0.4); }
+.isle-reminder-remove:hover { color: #ff453a; background-color: rgba(255, 69, 58, 0.15); }
 
-.isle-reminders-empty { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.55); padding-top: 22px; }
+.isle-reminders-empty { font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.45); padding-top: 22px; }
 
 /* Plain text fields, inside the row (Blur my Shell restyles entries with !important). */
 #isleIsland .isle-reminder-field,
@@ -673,6 +696,175 @@
  * fields with what is typed. */
 #isleIsland .isle-reminder-field StLabel.hint-text { color: rgba(255, 255, 255, 0.45); margin-left: 0; padding-left: 0; }
 #isleIsland .isle-entry StLabel.hint-text, #isleIsland .isle-voice-entry StLabel.hint-text { margin-left: 0; padding-left: 0; }
+
+/* ── Calories ─────────────────────────────────────────── */
+
+.isle-calories { padding: 0 4px; }
+.isle-calorie-header { height: 26px; padding: 0; spacing: 8px; margin-bottom: 6px; }
+.isle-calorie-title { font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: -0.3px; }
+.isle-calorie-total {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff453a;
+  background-color: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.isle-calorie-scroll { -st-vfade-offset: 14px; margin-bottom: 6px; }
+.isle-calorie-list { spacing: 4px; }
+.isle-calorie-row {
+  min-height: 26px;
+  padding: 4px 8px;
+  spacing: 8px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition-duration: 120ms;
+}
+.isle-calorie-row:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.isle-calorie-food { font-size: 13px; font-weight: 500; color: #ffffff; }
+.isle-calorie-kcal {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+  padding-right: 4px;
+}
+.isle-calorie-remove {
+  padding: 3px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.4);
+  transition-duration: 120ms;
+}
+.isle-calorie-remove:hover {
+  color: #ff453a;
+  background-color: rgba(255, 69, 58, 0.15);
+}
+.isle-calorie-empty {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+  padding-top: 24px;
+}
+
+.isle-calorie-form {
+  height: 28px;
+  padding: 2px 4px 2px 10px;
+  spacing: 8px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition-duration: 120ms;
+}
+.isle-calorie-form:focus-within {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+#isleIsland .isle-calorie-field,
+#isleIsland .isle-calorie-field:focus {
+  font-size: 12.5px;
+  padding: 0;
+  border: none;
+  color: #ffffff !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  caret-color: #ffffff;
+  selection-background-color: rgba(255, 255, 255, 0.28);
+  selected-color: #ffffff;
+}
+#isleIsland .isle-calorie-field StLabel.hint-text {
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: 0;
+  padding-left: 0;
+}
+.isle-calorie-add {
+  padding: 4px 8px;
+  border-radius: 7px;
+  color: #ffffff;
+  background-color: rgba(255, 69, 58, 0.25);
+  border: 1px solid rgba(255, 69, 58, 0.45);
+  transition-duration: 120ms;
+}
+.isle-calorie-add:hover {
+  background-color: #ff453a;
+  border-color: #ff453a;
+}
+
+/* ── Prayer Times ─────────────────────────────────────── */
+
+.isle-prayer { padding: 0 4px; }
+.isle-prayer-header { height: 26px; padding: 0; spacing: 8px; margin-bottom: 6px; }
+.isle-prayer-title { font-size: 16px; font-weight: 700; color: #ffffff; letter-spacing: -0.3px; }
+.isle-prayer-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.isle-prayer-grid { spacing: 6px; padding: 2px 0; }
+.isle-prayer-card {
+  padding: 10px 4px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition-duration: 160ms;
+}
+.isle-prayer-card:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.isle-prayer-card.active {
+  background-color: rgba(255, 69, 58, 0.14);
+  border: 1px solid rgba(255, 69, 58, 0.4);
+}
+.isle-prayer-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.isle-prayer-card.active .isle-prayer-card-name {
+  color: #ffffff;
+  font-weight: 700;
+}
+.isle-prayer-card-time {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 3px;
+}
+.isle-prayer-card.active .isle-prayer-card-time {
+  color: #ff453a;
+}
+.isle-prayer-card-badge {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ff453a;
+  background-color: rgba(255, 69, 58, 0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-top: 4px;
+}
+.isle-prayer-footer { margin-top: 4px; }
+.isle-prayer-source {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.35);
+}
+.isle-prayer-empty {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.4);
+}
 
 /* ── Calendar ─────────────────────────────────────────── */
 

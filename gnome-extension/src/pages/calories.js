@@ -19,15 +19,15 @@ class CaloriesPage extends Page {
         });
         this.name = 'calories';
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
-        const header = new St.BoxLayout({style_class: 'isle-reminders-header'});
-        header.add_child(label('Calories today', 'isle-reminders-title', {x_expand: true}));
-        this._total = label('0 kcal', 'isle-reminders-count');
+        const header = new St.BoxLayout({style_class: 'isle-calorie-header'});
+        header.add_child(label('Calories Today', 'isle-calorie-title', {x_expand: true}));
+        this._total = label('0 kcal', 'isle-calorie-total');
         header.add_child(this._total);
         column.add_child(header);
 
-        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-reminder-list', x_expand: true});
+        this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-calorie-list', x_expand: true});
         const scroll = new St.ScrollView({
-            style_class: 'isle-reminder-scroll',
+            style_class: 'isle-calorie-scroll',
             hscrollbar_policy: St.PolicyType.NEVER,
             vscrollbar_policy: St.PolicyType.EXTERNAL,
             x_expand: true,
@@ -37,17 +37,18 @@ class CaloriesPage extends Page {
         column.add_child(scroll);
 
         const form = new St.BoxLayout({style_class: 'isle-calorie-form'});
-        this._food = new St.Entry({style_class: 'isle-reminder-field', hint_text: 'Food', x_expand: true});
-        this._kcal = new St.Entry({style_class: 'isle-reminder-field', hint_text: 'kcal', width: 86});
+        this._food = new St.Entry({style_class: 'isle-calorie-field isle-calorie-field-food', hint_text: 'Food item', x_expand: true});
+        this._kcal = new St.Entry({style_class: 'isle-calorie-field isle-calorie-field-kcal', hint_text: 'kcal', width: 68});
         this._kcal.clutter_text.set_input_purpose(Clutter.InputContentPurpose.DIGITS);
-        const add = iconButton('isle-plus-symbolic', 'isle-button-flat', () => this._add(), {
-            size: 12, accessibleName: 'Add food entry',
+        const add = iconButton('isle-plus-symbolic', 'isle-calorie-add', () => this._add(), {
+            size: 11, accessibleName: 'Add food entry',
         });
         form.add_child(this._food);
         form.add_child(this._kcal);
         form.add_child(add);
         column.add_child(form);
         this.add_child(column);
+
         this._food.clutter_text.connect('activate', () => this._add());
         this._kcal.clutter_text.connect('activate', () => this._add());
         this.watch(['calorieEntries'], () => this._update());
@@ -68,20 +69,20 @@ class CaloriesPage extends Page {
         const entries = this._todayEntries();
         this._total.text = `${entries.reduce((total, item) => total + item.calories, 0)} kcal`;
         if (!entries.length) {
-            this._list.add_child(label('Log a meal to start today’s total', 'isle-reminders-empty', {
+            this._list.add_child(label('No meals logged yet today', 'isle-calorie-empty', {
                 x_align: Clutter.ActorAlign.CENTER,
             }));
             return;
         }
         for (const entry of [...entries].reverse()) {
-            const row = new St.BoxLayout({style_class: 'isle-reminder', x_expand: true});
-            const item = label(entry.food, 'isle-reminder-title', {x_expand: true});
+            const row = new St.BoxLayout({style_class: 'isle-calorie-row', x_expand: true});
+            const item = label(entry.food, 'isle-calorie-food', {x_expand: true});
             item.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             row.add_child(item);
-            row.add_child(label(`${entry.calories} kcal`, 'isle-reminders-count'));
-            row.add_child(iconButton('isle-close-symbolic', 'isle-button-flat', () =>
+            row.add_child(label(`${entry.calories} kcal`, 'isle-calorie-kcal'));
+            row.add_child(iconButton('isle-close-symbolic', 'isle-calorie-remove', () =>
                 this.daemon.call('calories', 'Remove', entry.id), {
-                size: 12, accessibleName: `Remove ${entry.food}`,
+                size: 11, accessibleName: `Remove ${entry.food}`,
             }));
             this._list.add_child(row);
         }
