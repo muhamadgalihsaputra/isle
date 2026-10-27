@@ -289,6 +289,8 @@ export class Controller {
             if (!this._alert)
                 this._nextAlert();
         });
+        this._sessionModeChanged = Main.sessionMode.connect('updated', () => this._syncSessionMode());
+        this._syncSessionMode();
         this._connectSignals();
         this._keyboard = new KeyboardWatcher();
         this._keyboard.connect('caps-lock', (_watcher, on) => this._postSystemAlert(Alerts.capsLock(on), 'caps-lock'));
@@ -610,9 +612,23 @@ export class Controller {
             this._syncFullscreen();
     }
 
+    /** Hides the island when the screen locks, and brings it back when unlocked. */
+    _syncSessionMode() {
+        if (Main.sessionMode.isLocked) {
+            this.collapse();
+            this._island.visible = false;
+        } else {
+            this._syncFullscreen();
+        }
+    }
+
     // GNOME hides the island under a fullscreen window only when fullscreen changes, not when it moves
     // to another display: its rule (layout.js `_updateActorVisibility`), here.
     _syncFullscreen() {
+        if (Main.sessionMode.isLocked) {
+            this._island.visible = false;
+            return;
+        }
         this._island.visible = !(global.window_group.visible && this._monitor?.inFullscreen);
     }
 
@@ -2244,6 +2260,10 @@ export class Controller {
 
         this._settingsChanged.forEach(id => this._settings.disconnect(id));
         Main.layoutManager.disconnect(this._monitorsChanged);
+        if (this._sessionModeChanged) {
+            Main.sessionMode.disconnect(this._sessionModeChanged);
+            this._sessionModeChanged = null;
+        }
         this._osd.destroy();
         this._keyboard.destroy();
         this._shelfHelper.destroy();
@@ -2290,6 +2310,10 @@ export class Controller {
         this._settingsChanged?.forEach(id => this._settings.disconnect(id));
         if (this._monitorsChanged)
             Main.layoutManager.disconnect(this._monitorsChanged);
+        if (this._sessionModeChanged) {
+            Main.sessionMode.disconnect(this._sessionModeChanged);
+            this._sessionModeChanged = null;
+        }
         for (const part of [this._osd, this._keyboard, this._reminders, this._installedApps])
             part?.destroy();
         this._shelfHelper?.destroy();
