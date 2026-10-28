@@ -7,9 +7,9 @@ import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
-import {timerColor} from '../compact.js';
 import {VERTICAL, onUiScale} from '../compat.js';
 import * as Format from '../format.js';
+import * as Palette from '../palette.js';
 import {Ring, icon, iconButton, label} from '../widgets.js';
 import {Page} from './page.js';
 
@@ -20,7 +20,7 @@ const PHASES = {
     short_break: 'Break',
     long_break: 'Long break',
 };
-const RING_SIZE = 104;
+const RING_SIZE = 82;
 /** Reset and Start, at the right, in a slot as wide as both (CSS px): Reset appearing moves nothing. */
 const CONTROLS_WIDTH = 152;
 /** Shown until isled reports the timer: a fresh 25-minute focus session. */
@@ -42,23 +42,24 @@ class TimerPage extends Page {
         });
         this.name = 'focus';
 
-        // A ring that fills clockwise as the phase runs; the time and the phase inside.
-        const inside = new St.BoxLayout({...VERTICAL, y_align: Clutter.ActorAlign.CENTER});
-        this._time = label('25:00', 'isle-timer-time', {x_align: Clutter.ActorAlign.CENTER});
-        this._phase = label('Focus', 'isle-timer-phase', {x_align: Clutter.ActorAlign.CENTER});
-        inside.add_child(this._time);
-        inside.add_child(this._phase);
-        this._ring = new Ring({size: RING_SIZE, lineWidth: 5, trackOpacity: 0.14, child: inside});
+        // The coloured progress ring anchors the page; the larger countdown gets its own space.
+        const glyph = new St.Icon({gicon: icon('isle-timer'), icon_size: 29, style_class: 'isle-timer-glyph'});
+        this._ring = new Ring({size: RING_SIZE, lineWidth: 5, trackOpacity: 0.22, child: glyph});
         this._ring.y_align = Clutter.ActorAlign.CENTER;
         this.add_child(this._ring);
-        this.add_child(new St.Widget({x_expand: true}));
 
-        const steppers = new St.BoxLayout({...VERTICAL, style_class: 'isle-steppers', y_align: Clutter.ActorAlign.CENTER});
+        const main = new St.BoxLayout({...VERTICAL, style_class: 'isle-timer-main', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        this._time = label('25:00', 'isle-timer-time', {x_align: Clutter.ActorAlign.CENTER});
+        this._phase = label('Focus', 'isle-timer-phase', {x_align: Clutter.ActorAlign.CENTER});
+        main.add_child(this._time);
+        main.add_child(this._phase);
+
+        const steppers = new St.BoxLayout({style_class: 'isle-steppers', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         this._values = new Map();
         for (const stepper of STEPPERS)
             steppers.add_child(this._buildStepper(stepper));
-        this.add_child(steppers);
-        this.add_child(new St.Widget({x_expand: true}));
+        main.add_child(steppers);
+        this.add_child(main);
 
         // Reset only once started; then Start, Pause or Resume.
         const controls = new St.BoxLayout({style_class: 'isle-timer-controls', x_expand: true,
@@ -73,6 +74,7 @@ class TimerPage extends Page {
         pill.add_child(this._playIcon);
         pill.add_child(this._playLabel);
         this._play = new St.Button({style_class: 'isle-start-pill', child: pill, can_focus: true, accessible_name: 'Start or pause'});
+        this._phaseStyle = null;
         this._play.connect('clicked', () => this._toggle());
         controls.add_child(this._play);
         const slot = new St.Widget({layout_manager: new Clutter.BinLayout()});
@@ -140,8 +142,16 @@ class TimerPage extends Page {
         const idle = state.phase === 'idle';
         const remaining = this._remaining(state);
 
-        this._ring.color = timerColor(state.phase);
+        const onBreak = state.phase === 'short_break' || state.phase === 'long_break';
+        this._ring.color = onBreak ? Palette.GREEN : Palette.RED;
         this._ring.progress = idle ? 0 : 1 - remaining / state.duration_ms;
+        const phaseStyle = onBreak ? 'isle-phase-break' : 'isle-phase-focus';
+        if (this._phaseStyle !== phaseStyle) {
+            if (this._phaseStyle)
+                this._play.remove_style_class_name(this._phaseStyle);
+            this._phaseStyle = phaseStyle;
+            this._play.add_style_class_name(phaseStyle);
+        }
         this._time.text = Format.duration(remaining);
         this._phase.text = PHASES[state.phase] ?? 'Focus';
         this._playIcon.gicon = icon(state.running ? 'isle-pause-symbolic' : 'isle-play-symbolic');

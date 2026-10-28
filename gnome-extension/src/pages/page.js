@@ -20,6 +20,8 @@ export const Page = GObject.registerClass({
         'tint-motion': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
         // The user did something that should close the island.
         'request-close': {},
+        // A page button opens Isle's preferences.
+        'settings-requested': {},
         // `hasNews` changed.
         'news-changed': {},
         // `available` changed.

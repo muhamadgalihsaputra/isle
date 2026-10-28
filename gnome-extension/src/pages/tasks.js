@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Reminders, the right half of the Focus page (focus.js), in dark mode: an orange title and
-// count, a ring and a hairline per reminder, and a last row to add one; a ticked one is struck, then goes.
+// Reminders: a completion summary beside the task list. Finished rows stay checked until midnight.
 
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import {VERTICAL} from '../compat.js';
-import {iconButton, label, wrapLines} from '../widgets.js';
+import {icon, iconButton, label, wrapLines} from '../widgets.js';
 import {Page} from './page.js';
 
-/** How long the dot takes to pop into the ring. */
+/** How long the checkmark takes to pop into the circle. */
 const TICK_MS = 200;
-/** A ticked reminder stays this long, struck through, so a second tap can undo it. */
+/** A ticked reminder stays this long before folding into the completed list. */
 const LINGER_MS = 900;
 /** How long it takes to fade and fold away. */
 const LEAVE_MS = 260;
@@ -66,17 +65,19 @@ class TasksPage extends Page {
             height,
         });
         this.name = 'reminders';
+        this._editing = false;
         /** The reminder being renamed, if any; the list holds still meanwhile. */
         this._renaming = null;
         /** Reminders ticked a moment ago, on their way out; the list holds still meanwhile. */
         this._leaving = new Set();
-        /** Ticked and gone, until isled reports them done. */
+        /** Ticked and folded away, until isled reports them done. */
         this._gone = new Set();
         /** Each shown reminder's row by id, kept while the reminder is unchanged. */
         this._rows = new Map();
 
-        const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
-        column.add_child(this._buildHeader());
+        const layout = new St.BoxLayout({style_class: 'isle-reminders-layout', x_expand: true, y_expand: true});
+        layout.add_child(this._buildSummary());
+        const column = new St.BoxLayout({...VERTICAL, style_class: 'isle-reminders-content', x_expand: true, y_expand: true});
         this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-reminder-list'});
         this._scroll = new St.ScrollView({
             style_class: 'isle-reminder-scroll',
@@ -88,13 +89,15 @@ class TasksPage extends Page {
         });
         this._scroll.set_child(this._list);
         this._newRow = this._buildNewRow();
-        // Under the new row when there are none.
+        this._newRow.visible = false;
+        // Shown over the list when there are no tasks.
         this._empty = label('', 'isle-reminders-empty', {x_align: Clutter.ActorAlign.CENTER, y_expand: true});
         const middle = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: true});
         middle.add_child(this._scroll);
         middle.add_child(this._empty);
         column.add_child(middle);
-        this.add_child(column);
+        layout.add_child(column);
+        this.add_child(layout);
 
         this.watch(['tasks'], () => this._update());
         this._update();
@@ -104,16 +107,61 @@ class TasksPage extends Page {
         return this.daemon.state.tasks ?? [];
     }
 
+    _syncProgress(tasks = this._tasks()) {
+        const done = tasks.filter(task => task.done || this._leaving.has(task.id) || this._gone.has(task.id)).length;
+        this._progress.text = tasks.length ? `${done}/${tasks.length}` : '0';
+        this._progressSummary.text = tasks.length ? 'tasks completed' : 'No tasks yet';
+    }
+
     // Building
 
-    _buildHeader() {
-        const header = new St.BoxLayout({style_class: 'isle-reminders-header'});
-        header.add_child(label('Reminders', 'isle-reminders-title', {x_expand: true}));
-        this._count = label('', 'isle-reminders-count');
-        header.add_child(this._count);
-        header.add_child(iconButton('isle-plus-symbolic', 'isle-button-flat isle-reminders-add',
-            () => this._focusNew(), {size: 12, accessibleName: 'New reminder'}));
-        return header;
+    _buildSummary() {
+        const summary = new St.BoxLayout({...VERTICAL, style_class: 'isle-reminders-summary'});
+        summary.add_child(label('Reminders', 'isle-reminders-title'));
+        this._progress = label('0', 'isle-reminders-progress');
+        this._progressSummary = label('No tasks yet', 'isle-reminders-progress-summary');
+        summary.add_child(this._progress);
+        summary.add_child(this._progressSummary);
+
+        const actions = new St.BoxLayout({style_class: 'isle-reminders-actions'});
+        const addContents = new St.BoxLayout({style_class: 'isle-reminders-action-contents'});
+        addContents.add_child(new St.Icon({gicon: icon('isle-plus-symbolic'), icon_size: 12}));
+        addContents.add_child(label('Add task', 'isle-reminders-action-label'));
+        const add = new St.Button({
+            style_class: 'isle-reminders-action isle-reminders-add-action',
+            child: addContents,
+            can_focus: true,
+            accessible_name: 'Add a reminder',
+        });
+        add.connect('clicked', () => this._focusNew());
+        actions.add_child(add);
+
+        const editContents = new St.BoxLayout({style_class: 'isle-reminders-action-contents'});
+        editContents.add_child(new St.Icon({gicon: icon('isle-text'), icon_size: 12}));
+        this._editLabel = label('Edit', 'isle-reminders-action-label');
+        editContents.add_child(this._editLabel);
+        this._editButton = new St.Button({
+            style_class: 'isle-reminders-action isle-reminders-edit-action',
+            child: editContents,
+            can_focus: true,
+            accessible_name: 'Edit reminders',
+        });
+        this._editButton.connect('clicked', () => this._toggleEditing());
+        actions.add_child(this._editButton);
+        summary.add_child(actions);
+        return summary;
+    }
+
+    _toggleEditing() {
+        this._editing = !this._editing;
+        this._editLabel.text = this._editing ? 'Done' : 'Edit';
+        this._editButton.accessible_name = this._editing ? 'Finish editing reminders' : 'Edit reminders';
+        if (this._editing)
+            this._editButton.add_style_pseudo_class('checked');
+        else
+            this._editButton.remove_style_pseudo_class('checked');
+        for (const row of this._rows.values())
+            row._removeButton.ease({opacity: this._editing || row._hovered ? 255 : 0, duration: 120});
     }
 
     // The last row: a faint ring and a field, where typing a title and Enter adds it.
@@ -147,6 +195,8 @@ class TasksPage extends Page {
     }
 
     _focusNew() {
+        this._newRow.visible = true;
+        this._empty.visible = false;
         this.emit('request-keyboard', true);
         this._entry.grab_key_focus();
         this._revealNew();
@@ -169,22 +219,24 @@ class TasksPage extends Page {
     }
 
     _stopAdding() {
+        const hadFocus = this._entry.clutter_text.has_key_focus();
         this._entry.text = '';
-        if (this._entry.clutter_text.has_key_focus())
+        this._newRow.visible = false;
+        this._empty.visible = this._tasks().length === 0;
+        if (hadFocus)
             this.emit('request-keyboard', false);
     }
 
     // Showing
 
     _update() {
+        this._syncProgress();
         if (this._renaming !== null || this._leaving.size > 0)
             return;
         const tasks = this._tasks();
-        const open = tasks.filter(task => !task.done);
-        // Forgotten once isled has them done, or gone for another reason.
-        this._gone = new Set(open.filter(task => this._gone.has(task.id)).map(task => task.id));
-        const shown = open.filter(task => !this._gone.has(task.id)).sort((a, b) => a.id - b.id);
-        this._count.text = String(shown.length);
+        // A ticked row folds away briefly, then returns checked for the rest of the day.
+        this._gone = new Set(tasks.filter(task => !task.done && this._gone.has(task.id)).map(task => task.id));
+        const shown = tasks.filter(task => task.done || !this._gone.has(task.id)).sort((a, b) => a.id - b.id);
 
         // The field stays in place, with what is typed in it and its focus, while the rows above it are
         // rebuilt: taking it off the stage, even for a moment, would drop the keyboard focus.
@@ -225,8 +277,8 @@ class TasksPage extends Page {
             previous = row;
         }
         this._known = new Set(shown.map(task => task.id));
-        this._empty.visible = shown.length === 0;
-        this._empty.text = tasks.length > shown.length ? 'All done' : 'No reminders';
+        this._empty.visible = shown.length === 0 && !this._newRow.visible;
+        this._empty.text = tasks.length ? 'All done' : 'No reminders';
     }
 
     /** Opens `row` from nothing to its height, fading in, while the rows below make room. */
@@ -258,19 +310,34 @@ class TasksPage extends Page {
         // expand too and take all the list's room.
         const row = new ReminderRow({style_class: 'isle-reminder', reactive: true, y_expand: false});
 
-        // The tick box: a ring, and a dot that pops into it when ticked.
-        const dot = new St.Widget({style_class: 'isle-reminder-dot', scale_x: 0, scale_y: 0, x_expand: true, y_expand: true});
+        // The tick box: an empty ring, then a checkmark that pops into the filled circle.
+        const dot = new St.Icon({
+            gicon: icon('isle-check-symbolic'),
+            icon_size: 10,
+            style_class: 'isle-reminder-checkmark',
+            opacity: 0,
+            scale_x: 0,
+            scale_y: 0,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         dot.set_pivot_point(0.5, 0.5);
         // By the first line of a title that wraps.
         const check = new St.Button({
             style_class: 'isle-reminder-check',
             child: dot,
-            accessible_name: 'Mark as done',
+            accessible_name: task.done ? 'Mark as not done' : 'Mark as done',
             y_align: Clutter.ActorAlign.START,
         });
+        if (task.done) {
+            check.add_style_pseudo_class('checked');
+            dot.scale_x = dot.scale_y = 1;
+            dot.opacity = 255;
+            row.add_style_class_name('isle-reminder-done');
+        }
         row.add_child(check);
 
-        // The title over a hairline that runs from the text to the edge.
+        // The title over its own strike line, so long titles can wrap cleanly.
         const column = new St.BoxLayout({...VERTICAL, x_expand: true, y_expand: true});
         const content = new St.BoxLayout({style_class: 'isle-reminder-content', y_expand: true});
         const titleBox = new St.Widget({style_class: 'isle-reminder-title-box', layout_manager: new Clutter.BinLayout(),
@@ -290,6 +357,16 @@ class TasksPage extends Page {
         strike.set_pivot_point(0, 0.5);
         titleBox.add_child(title);
         titleBox.add_child(strike);
+        if (task.done) {
+            title.add_style_class_name('done');
+            row.connect('notify::mapped', () => {
+                if (!row.mapped)
+                    return;
+                const box = titleBox.width;
+                const [textWidth] = title.clutter_text.get_layout().get_pixel_size();
+                strike.scale_x = box > 0 ? Math.min(1, textWidth / box) : 1;
+            });
+        }
         content.add_child(titleBox);
 
         // × appears while the pointer is on the row.
@@ -302,18 +379,29 @@ class TasksPage extends Page {
             }
         }, {size: 9, accessibleName: 'Delete reminder'});
         remove.opacity = 0;
-        onHover(row, hovered => remove.ease({opacity: hovered ? 255 : 0, duration: 120}));
+        row._removeButton = remove;
+        row._hovered = false;
+        remove.opacity = this._editing ? 255 : 0;
+        onHover(row, hovered => {
+            row._hovered = hovered;
+            remove.ease({opacity: this._editing || hovered ? 255 : 0, duration: 120});
+        });
         content.add_child(remove);
         column.add_child(content);
-        column.add_child(new St.Widget({style_class: 'isle-reminder-line'}));
         row.add_child(column);
 
-        check.connect('clicked', () => this._tick(task, {row, check, dot, title, strike}));
+        check.connect('clicked', () => {
+            if (task.done) {
+                this.daemon.call('todo', 'SetDone', task.id, false);
+                return;
+            }
+            this._tick(task, {row, check, dot, title, strike});
+        });
         return row;
     }
 
-    // Ticks a reminder: the ring turns orange with a dot in it, the title is struck through, it lingers
-    // a moment (a second tap undoes it), then fades and folds away.
+    // Ticks a reminder: the circle turns green, the title is struck through, then it folds into the
+    // completed list. A second tap during the short linger undoes it.
     _tick(task, {row, check, dot, title, strike}) {
         // Folding away already: too late to undo. A flag, not `reactive`: that restyles the box (:insensitive).
         if (row._folding)
@@ -324,6 +412,7 @@ class TasksPage extends Page {
             dot.ease({
                 scale_x: shown ? 1 : 0,
                 scale_y: shown ? 1 : 0,
+                opacity: shown ? 255 : 0,
                 duration: TICK_MS,
                 mode: shown ? Clutter.AnimationMode.EASE_OUT_BACK : Clutter.AnimationMode.EASE_OUT_QUAD,
             });
@@ -331,6 +420,8 @@ class TasksPage extends Page {
         if (this._leaving.has(task.id)) {
             this.cancel(name);
             this._leaving.delete(task.id);
+            this._syncProgress();
+            row.remove_style_class_name('isle-reminder-done');
             check.remove_style_pseudo_class('checked');
             check.accessible_name = 'Mark as done';
             title.remove_style_class_name('done');
@@ -344,6 +435,8 @@ class TasksPage extends Page {
         const box = strike.get_parent()?.width ?? 0;
         const [textWidth] = title.clutter_text.get_layout().get_pixel_size();
         this._leaving.add(task.id);
+        this._syncProgress();
+        row.add_style_class_name('isle-reminder-done');
         check.add_style_pseudo_class('checked');
         check.accessible_name = 'Not done';
         // On the title alone: on the row it restyled every widget in it, in the click's frame.

@@ -30,10 +30,10 @@ sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 144 × P; 232 with an activity | 10 | 7 | Clock; activity slots left/right |
-| Compact, hanging | 164 × (P + 30); 256 with an activity | 16 | 10 | As above |
+| Compact | 210 × P; expands to fit statuses | 10 | 7 | Clock left · assistant centre · live status right |
+| Compact, hanging | 216 × (P + 30); expands to fit statuses | 16 | 10 | As above |
 | Peek (alert) | fits its content, 220–380 wide × (P + 56); 62 high off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button, centred |
-| Expanded | 600 × (P + 164) on every page; 720 for lyrics | 32 | 22 | Header row (tabs) · page |
+| Expanded | 600 minimum × (P + 164); grows for the header or lyrics | 32 | 22 | Three-zone header · page |
 
 The top bar is slimmed to a thin bezel (status icons and the tray stay in
 it) and see-through like glass, with no colour of its own. The
@@ -96,7 +96,7 @@ place, dimmed, so the layout never jumps.
 
 | Input | Closed / alert | Open |
 |---|---|---|
-| Pointer rests 120 ms (Settings: 60–1000 ms, or click only) | Open on the default page | – |
+| Pointer rests 120 ms (Settings: 60–1000 ms, or click only) | Open on the default page; the assistant face opens the assistant | – |
 | Pointer leaves | – | Close after 300 ms (not while typing or dragging a file) |
 | Click | Open now (an alert opens on its page) | Normal button clicks |
 | Middle-click | Play / pause | Play / pause |
@@ -119,50 +119,36 @@ call starts → Call during a call → Notifications if some arrived unseen
 runs → Music.
 
 Pages, in order: **Call** (only during a call) **· Music · Notifications ·
-Focus · Reminders · Shelf · Calendar · Usage** (Usage only with an AI plan found), one tab each in the header. Lists scroll with the wheel or touchpad and never show
-a scrollbar.
+Focus · Reminders · Shelf · Calendar · Calories · Water · Prayer · Usage**
+(Usage only with an AI plan found), one tab each in the header. Lists scroll
+with the wheel or touchpad and never show a scrollbar.
 
 ## 4. Closed island
 
 - Where it is: on the main display, in its top bar; or (Settings) on the display of the window in use,
   moving there once closed. A display without the top bar has the island hang from its top edge, with
   a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
-- Right slot, first that applies: a warning (Isle's service stopped; a click offers to restart it) →
-  the bot, 18 px, in the look chosen, blinking and glancing every few seconds (the assistant works on
-  a request or a command runs with the island closed; a click shows it) →
-  muted microphone on a call → a second activity → music bars → up to two privacy dots.
-- Two activities at once: the first of recording, call, music and timer keeps the left slot and the
-  centre; the next takes the right slot: the timer's time left (white while focusing,
-  green on a break; beside the music bars while a song is first), a call's green phone and length, or
-  the music bars. A second time is as large as the clock and on its line, with no ring. The island widens
-  by as much as that is wider than a slot, on both sides, so the clock stays centred. Each side's sign
-  keeps to its end of the island, all as far in.
-- Left slot, first that applies: breathing red dot (screen recording) →
-  green phone (a call) → focus timer ring → cover art (a song playing or paused) → white dot (unseen
-  notifications).
-- Do Not Disturb: a small moon before the clock (or the call's or recording's length), whatever the sides hold.
-- While the screen records, the centre shows how long it has been recording
-  instead of the clock; during a call (and no recording), how long the call
-  has lasted, in green.
-- Right slot: a red crossed-out microphone while a call is muted, else music
-  bars while a song is loaded. They dance only while it
-  plays and the closed island is on screen, and rest after a minute without
-  input. Paused, they rest and dim, and the cover stays until the player
-  closes.
-- Far right: privacy dots: green camera, orange microphone,
-  blue screen sharing (the island widens by 22 px while any is shown).
-- Centre: the clock (follows GNOME's 12/24-hour setting).
+- Left: the clock (follows GNOME's 12/24-hour setting), with the Do Not Disturb moon before it.
+- Centre: the assistant's 26 px face in the chosen look. Its eyes follow the pointer over the face,
+  and it blinks and glances every few seconds. Click or rest the pointer on it to open the assistant.
+  While the assistant works in the background, its expression shows that state.
+- Right: all active statuses in one row, ordered as service warning → screen recording →
+  call → music → focus timer → unseen notifications. The notch grows symmetrically to fit them. Recording shows its red dot and duration; a call
+  shows its green phone and duration, plus a muted-microphone sign; music uses equaliser bars; focus
+  uses its progress ring and remaining time; notifications show a bell and unread count. Paused music
+  bars rest and dim; playing bars move only while the closed
+  island is on screen, and rest after a minute without input.
+- Far right: privacy dots: green camera, orange microphone, blue screen sharing. They stay visible
+  beside the right-hand status (the island widens to fit them).
 
 ## 5. Pages
 
-Every page shares the header row inside the top bar. On
-the left, a tab per page: icons, the open page's in a lit pill with its
-name, and a red dot on Notifications while some are unseen. On the right a
-red "● 0:42" pill while the screen records (click to stop), a green "📞 1:15"
-pill during a call on any page but Call (click: the Call page), the privacy
-dots, the music bars, the assistant's sparkle, `[timer ring] Tue 20 Oct 12:26` and the gear. The
-tabs' icons, the gear and the pages' contents share the same 28 px edges. The Call tab, its
-phone in green, only shows during a call.
+Every page shares the header row inside the top bar. The date and time sit on
+the left. Page tabs stay centred, with the open page's icon in a lit pill with
+its name, and a red dot on Notifications while some are unseen. The right side
+holds recording and call controls, privacy dots, music bars, the assistant's
+sparkle, and Settings. The header grows to give these three zones separate
+space. The Call tab, with its phone in green, only shows during a call.
 
 **Call**, laid out like FaceTime's controls. A call is an app holding the
 microphone for over 2 s (sites open it briefly to ask for permission), in
@@ -300,19 +286,23 @@ when a password manager marks them secret, from ignored apps (password
 managers by default; Settings → Clipboard), or while history is off.
 
 **Reminders** (a page of its own, the island's full width), in dark mode:
-an orange "Reminders" with the number still open on the right
-and a +; under it the reminders as rows of a thin ring and the title over a
-hairline that runs from the text to the edge (a long title wraps over as
-many lines as it needs, the ring by its first line), scrolling past what
-fits, and a
-last faint row "New Reminder" (Enter adds and stays ready, Esc stops; + puts
-the cursor there). Clicking the title renames it in place (Enter or clicking
-away saves, Esc cancels); × appears on hover. Ticking one fills its ring
-with an orange dot and strikes the title through at once; it lingers 0.9 s
-(a second tap undoes it), then fades and folds away, the rows below sliding
-up. Closing the island in that moment keeps it done. Empty: "No Reminders",
-or "All Done" once today's are ticked off. Done ones are cleared at
-midnight.
+a completion summary on the left and the task list on the right. The summary
+shows completed versus total tasks and has **Add task** and **Edit** actions.
+Add opens the final row's text field (Enter adds and stays ready, Esc stops);
+Edit reveals the delete buttons. Clicking a title renames it in place (Enter
+or clicking away saves, Esc cancels). A long title wraps over as many lines
+as it needs. Ticking a task fills its circle green with a checkmark and strikes
+the title through; it folds out of the open list after 0.9 s, then stays in the
+completed list until midnight. A second tap during the short linger undoes it;
+completed tasks can also be unticked. Empty: "No Reminders". Done ones are
+cleared at midnight.
+
+**Water** (a page of its own): a daily total and goal on the left, the
+percentage and amount left below, and an hourly chart on the right. The blue
+**Drink** button logs the configured serving (250 ml by default); **Settings**
+opens Daily Life preferences for the serving and daily goal (2,000 ml by
+default). The chart shows today's drinks in a rolling 12-hour window. Entries
+stay in `~/.local/share/isle/water.json`.
 
 **Calendar** (title "Calendar"), as a calendar widget. Left: the
 month in red capitals with the year (click: back to today) and ‹ › to move
@@ -353,6 +343,9 @@ computer. Right-clicking an alert puts it away without opening it.
 | Caps Lock (instant) | ⇪ | Caps Lock on / off | – | 1.5 s |
 | New song (off by default) | cover | title / artist | – | 2.6 s |
 | Timer phase ends (+ chime) | timer | Focus session done… | Start break | 8 s |
+| Calorie goal (50%, 100%) | orange flame | Halfway to your calorie goal / Daily calorie goal reached · logged of goal kcal | 50% / 100% | 8 s, once per day |
+| Water goal (50%, 100%) | blue drop | Halfway to your water goal / Water goal reached · logged of goal volume | 50% / 100% | 8 s, once per day |
+| Prayer time (on by default) | amber crescent | prayer name / It’s time to pray · city | prayer time | 8 s, no chime |
 | Screen recording started | red record icon | Recording screen | Stop | 2.6 s |
 | Notification (GNOME's sound) | app icon, large | title / first line (only who it is from while the screen is shared) | its first button ("Mark as read") | 4 s; passing (a screenshot taken) 2.5 s; critical 20 s, instant and sticky |
 | Reminder (+ chime) | bell | the reminder | – | 8 s, sticky |
@@ -366,8 +359,8 @@ computer. Right-clicking an alert puts it away without opening it.
 | An AI's alerts could not be turned on | its logo | Couldn't turn on Codex alerts / why | – | 8 s |
 
 Badges are grey unless the colour says something (green charging, red low
-battery or failure, the plan's own colour, blue for an event); nothing amber.
-Join is the one blue button, marking the action to take. Buttons on alerts,
+battery or failure, the plan's own colour, blue for water or an event, amber
+for prayer, and orange for calories). Join is the one blue button, marking the action to take. Buttons on alerts,
 notifications and the assistant are translucent grey pills with white text,
 lighter under the pointer.
 

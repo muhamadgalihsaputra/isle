@@ -5,10 +5,10 @@
 **A notch-style island for the GNOME desktop.**
 
 Music with synced lyrics, calls, notifications, a focus timer, reminders, a
-calendar that tells you when to join a meeting, a clipboard shelf, Claude
-Code and Codex asking you right there, and an assistant that installs and
-fixes things with the AI you already use, living in a notch at the top of
-your screen.
+water tracker, calories, prayer times, a calendar that tells you when to join
+a meeting, a clipboard shelf, Claude Code and Codex asking you right there,
+and an assistant that installs and fixes things with the AI you already use,
+living in a notch at the top of your screen.
 
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 ![GNOME Shell 46–51](https://img.shields.io/badge/GNOME%20Shell-46%E2%80%9351-4a86cf.svg)
@@ -22,8 +22,9 @@ your screen.
 </div>
 
 Isle turns the centre of the top bar into a black notch.
-At rest it shows the time and what is going on (a song, a timer, a
-recording, or two of them at once). Rest the pointer on it and it opens with spring physics into a
+At rest it shows the time on the left, the assistant in the middle, and what is going on on the right:
+music, a focus timer, a call, recording, or unread notifications. Its eyes follow the pointer; click or
+rest the pointer on its face to open the assistant. Rest the pointer elsewhere and Isle opens with spring physics into a
 small panel with tabs for each page; passing over it on the way elsewhere
 leaves it closed. Alerts for volume, charging, Caps Lock and notifications
 appear in the same place instead of in the middle of the screen.
@@ -73,7 +74,7 @@ appear in the same place instead of in the middle of the screen.
 <tr>
 <td width="50%" valign="top">
 <img src="docs/images/reminders.png" alt="Reminders page: a list with a long reminder wrapped over two lines" width="100%"><br>
-<b>Reminders</b>, a plain list: add, rename in place, tick one off and it is struck through, then goes. A long one wraps over as many lines as it needs.
+<b>Reminders</b>, with a completion count beside the list: add tasks, rename them in place, and keep finished tasks checked until midnight. A long title wraps over as many lines as it needs.
 </td>
 <td width="50%" valign="top">
 <img src="docs/images/clipboard.png" alt="Clipboard history" width="100%"><br>
@@ -524,8 +525,8 @@ Shell from what is on screen and never recorded.
 
 The optional MCP service is off until you set it up and enable it. It offers
 read tools and enables only the writes you list in `~/.config/isle/mcp.env`;
-it listens on loopback by default. The optional food log stays in
-`~/.local/share/isle/calories.json`.
+it listens on loopback by default. Food and water logs stay on this computer
+in `~/.local/share/isle/calories.json` and `~/.local/share/isle/water.json`.
 Custom instructions in Settings → Assistant are sent with requests to Claude
 Code and Codex; Antigravity manages its own personality. See the
 [MCP setup guide](docs/mcp.md) for remote access and write permissions.
