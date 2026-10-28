@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The open island: a header row inside the top bar (tabs to the pages on the
-// left; live activity and the clock on the right) above one page at a time. See docs/product-spec.md, section 5.
+// The open island: a header row inside the top bar (clock left, tabs centred,
+// live activity right) above one page at a time. See docs/product-spec.md, section 5.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -17,7 +17,7 @@ import {Bars, PrivacyDots, RecordingDot, Ring, fence, icon, iconButton, label, s
 
 /** Sizes and distances in CSS pixels (see `px`). */
 const EXPANDED_WIDTH = 600;
-/** The least room between the tabs and the status on the right. */
+/** The least room between the centred tabs and either side of the header. */
 const HEADER_GAP = 16;
 export const PAGE_HEIGHT = 150;
 /** Room below the page, so its content clears the rounded corners. */
@@ -33,6 +33,7 @@ const TABS = {
     shelf: {icon: 'isle-shelf', label: 'Shelf'},
     calendar: {icon: 'isle-calendar', label: 'Calendar'},
     calories: {icon: 'isle-flame', label: 'Calories'},
+    water: {icon: 'isle-water', label: 'Water'},
     prayer: {icon: 'isle-prayer', label: 'Prayer'},
     usage: {icon: 'isle-gauge', label: 'Usage'},
 };
@@ -67,7 +68,7 @@ export const ExpandedView = GObject.registerClass({
         'tint-motion': {param_types: [GObject.TYPE_DOUBLE, GObject.TYPE_DOUBLE]},
         // The mic button: open the voice assistant.
         'voice-requested': {},
-        // The gear by the clock: Isle's settings.
+        // The settings button beside the assistant.
         'settings-requested': {},
     },
 }, class ExpandedView extends St.BoxLayout {
@@ -138,13 +139,42 @@ export const ExpandedView = GObject.registerClass({
     }
 
     _buildHeader() {
-        const header = new St.Widget({layout_manager: new Clutter.BinLayout(), style_class: 'isle-header'});
-        this._tabsBox = this._buildTabs();
-        header.add_child(this._tabsBox);
+        const header = new St.BoxLayout({style_class: 'isle-header', x_expand: true});
 
-        // Right: a running recording (click to stop), privacy dots, music, the focus ring and the clock.
-        // A call has its own green tab on the left.
-        const status = this._status = new St.BoxLayout({style_class: 'isle-header-status', x_expand: true, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.CENTER});
+        // Keep the left and right zones the same width. The tab strip then stays centred
+        // in the island, with the clock and utility buttons outside its hit area.
+        this._clockSlot = new St.Widget({layout_manager: new Clutter.BinLayout(), y_expand: true});
+
+        const clock = this._clock = new St.BoxLayout({
+            y_align: Clutter.ActorAlign.CENTER,
+            x_align: Clutter.ActorAlign.START,
+            style_class: 'isle-header-clock',
+        });
+        this._headerRing = new Ring({size: 15, lineWidth: 2.5});
+        this._date = label('', 'isle-header-date');
+        this._time = label('', 'isle-header-time');
+        clock.add_child(this._headerRing);
+        clock.add_child(this._date);
+        clock.add_child(this._time);
+        this._clockSlot.add_child(clock);
+        header.add_child(this._clockSlot);
+
+        this._tabsBox = this._buildTabs();
+        this._tabsSlot = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_expand: true,
+            y_expand: true,
+        });
+        this._tabsSlot.add_child(this._tabsBox);
+        header.add_child(this._tabsSlot);
+
+        // Right: recording (click to stop), privacy dots, music, the assistant and settings.
+        // A call has its own green tab among the centred features.
+        const status = this._status = new St.BoxLayout({
+            style_class: 'isle-header-status',
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         const recordingBox = new St.BoxLayout({style_class: 'isle-recording-pill-box'});
         recordingBox.add_child(new RecordingDot());
         this._recordingTime = label('', 'isle-recording-time');
@@ -167,21 +197,15 @@ export const ExpandedView = GObject.registerClass({
             () => this.emit('voice-requested'), {size: 15, accessibleName: 'AI assistant'});
         status.add_child(this._micButton);
 
-        const clock = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER, style_class: 'isle-header-clock'});
-        this._headerRing = new Ring({size: 15, lineWidth: 2.5});
-        this._date = label('', 'isle-header-date');
-        this._time = label('', 'isle-header-time');
-        clock.add_child(this._headerRing);
-        clock.add_child(this._date);
-        clock.add_child(this._time);
-        status.add_child(clock);
         const settings = iconButton('isle-settings', 'isle-button-flat isle-header-settings',
             () => this.emit('settings-requested'), {size: 15, accessibleName: 'Settings'});
         // Its icon is an image, which takes no CSS colour: dimmed as the sparkle beside it, lit under the pointer.
         settings.child.opacity = SETTINGS_OPACITY;
         settings.connect('notify::hover', () => settings.child.ease({opacity: settings.hover ? 255 : SETTINGS_OPACITY, duration: 120}));
         status.add_child(settings);
-        header.add_child(status);
+        this._statusSlot = new St.Widget({layout_manager: new Clutter.BinLayout(), y_expand: true});
+        this._statusSlot.add_child(status);
+        header.add_child(this._statusSlot);
         return header;
     }
 
@@ -192,7 +216,7 @@ export const ExpandedView = GObject.registerClass({
 
     /** A tab per page; the open one is lit and says its name. */
     _buildTabs() {
-        const tabs = new St.BoxLayout({style_class: 'isle-tabs', x_expand: true, x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER});
+        const tabs = new St.BoxLayout({style_class: 'isle-tabs', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         this._tabs = this._pages.map((page, index) => {
             const {icon: iconName, label: text} = TABS[page.name];
             const glyph = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
@@ -308,8 +332,8 @@ export const ExpandedView = GObject.registerClass({
         return Math.max(this.page.preferredWidth ?? px(EXPANDED_WIDTH), this._headerWidth());
     }
 
-    // The tabs and the status side by side with room between, so they never overlap,
-    // whatever is showing (a call, a recording, a long date).
+    // The slots enforce a three-zone header: an equal-width clock and utility area
+    // sit outside the centred tabs. Grow the island to fit all three zones.
     _headerWidth() {
         if (!this._header?.get_stage())
             return 0;
@@ -320,8 +344,12 @@ export const ExpandedView = GObject.registerClass({
         const shown = this._tabs.reduce((sum, {nameClip}) => sum + nameClip.width, 0);
         const [, tabs] = this._tabsBox.get_preferred_width(-1);
         const [, status] = this._status.get_preferred_width(-1);
-        return Math.ceil(tabs - shown + longest + status +
-            this._header.get_theme_node().get_horizontal_padding() + px(HEADER_GAP));
+        const [, clock] = this._clock.get_preferred_width(-1);
+        const side = Math.max(clock, status) + px(HEADER_GAP);
+        this._clockSlot.width = side;
+        this._statusSlot.width = side;
+        return Math.ceil(tabs - shown + longest + 2 * side +
+            this._header.get_theme_node().get_horizontal_padding());
     }
 
     /** The widest tab name with its gap from the icon, measured once per font: names never change. */

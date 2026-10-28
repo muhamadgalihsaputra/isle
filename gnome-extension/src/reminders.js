@@ -8,6 +8,88 @@ import GLib from 'gi://GLib';
 /** Waits are cut into naps this long: GLib's clock stops during suspend, the wall clock does not. */
 const MAX_NAP_MS = 30 * 1000;
 
+const WELLBEING = {
+    calories: {entries: 'calorieEntries', goal: 'calorie-goal'},
+    water: {entries: 'waterEntries', goal: 'water-goal-ml'},
+};
+
+function localDateKey() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function totalToday(entries, kind) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    const amount = kind === 'water' ? 'amount_ml' : 'calories';
+    return entries.reduce((sum, entry) => entry.at_ms >= start.getTime() && entry.at_ms < end.getTime()
+        ? sum + (Number(entry[amount]) || 0) : sum, 0);
+}
+
+function reachedMilestones(total, goal) {
+    return new Set([50, 100].filter(percent => total >= goal * percent / 100));
+}
+
+/** Posts each calorie and water goal milestone once per day, only when new entries cross it. */
+export class WellbeingWatcher {
+    constructor(daemon, settings, onMilestone) {
+        this._daemon = daemon;
+        this._settings = settings;
+        this._onMilestone = onMilestone;
+        const day = localDateKey();
+        this._state = Object.fromEntries(Object.keys(WELLBEING).map(kind => {
+            const {entries, goal: goalKey} = WELLBEING[kind];
+            const current = daemon.state[entries];
+            const ready = Array.isArray(current);
+            const total = ready ? totalToday(current, kind) : 0;
+            const goal = settings.get_int(goalKey);
+            return [kind, {day, total, ready, shown: reachedMilestones(total, goal)}];
+        }));
+        this._changedId = daemon.connect('changed', (_daemon, key) => {
+            const kind = Object.keys(WELLBEING).find(name => WELLBEING[name].entries === key);
+            if (kind)
+                this._sync(kind);
+        });
+    }
+
+    _sync(kind) {
+        const {entries: entriesKey, goal: goalKey} = WELLBEING[kind];
+        const entries = this._daemon.state[entriesKey];
+        if (!Array.isArray(entries))
+            return;
+        const state = this._state[kind];
+        const day = localDateKey();
+        const total = totalToday(entries, kind);
+        const goal = this._settings.get_int(goalKey);
+        if (!state.ready) {
+            Object.assign(state, {day, total, ready: true, shown: reachedMilestones(total, goal)});
+            return;
+        }
+        const previous = state.day === day ? state.total : 0;
+        if (state.day !== day) {
+            state.day = day;
+            state.shown.clear();
+        }
+        state.total = total;
+        if (total <= previous)
+            return;
+
+        for (const percent of [100, 50]) {
+            if (state.shown.has(percent) || previous >= goal * percent / 100 || total < goal * percent / 100)
+                continue;
+            state.shown.add(percent);
+            this._onMilestone({kind, percent, total, goal, date: day});
+            return;
+        }
+    }
+
+    destroy() {
+        this._daemon.disconnect(this._changedId);
+    }
+}
+
 export class ReminderWatcher {
     /** `onDue({id, text}, done)` shows a reminder that is due, and calls `done` once it was on screen. */
     constructor(daemon, onDue) {
@@ -111,7 +193,8 @@ export class PrayerWatcher {
                 continue;
             already.add(item.id);
             this._settings.set_strv('prayer-alerted', [...already]);
-            this._onDue({id: item.id, text: `It’s time for ${item.prayer.name} prayer`});
+            this._onDue({id: item.id, prayer: item.prayer.name, time: item.prayer.time, city: schedule.city,
+                text: `It’s time for ${item.prayer.name} prayer`});
         }
         const upcoming = due.some(item => item.at > now);
         this._timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, enabled && upcoming ? 20_000 : 5 * 60_000, () => {

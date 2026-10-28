@@ -364,6 +364,44 @@ export function reminder({id, text}, onShown) {
     };
 }
 
+/** A calorie or water goal milestone, once as the day's intake crosses 50% or 100%. */
+export function wellbeingMilestone({kind, percent, total, goal, date}) {
+    const reached = percent >= 100;
+    const water = kind === 'water';
+    const amount = value => water
+        ? value >= 1000 ? `${(value / 1000).toFixed(1)} L` : `${value} ml`
+        : `${Math.round(value).toLocaleString()} kcal`;
+    return {
+        key: `goal:${kind}:${percent}:${date}`,
+        icon: water ? 'isle-water-blue' : 'isle-flame',
+        motion: reached ? 'pulse' : 'rise',
+        title: water
+            ? reached ? 'Water goal reached' : 'Halfway to your water goal'
+            : reached ? 'Daily calorie goal reached' : 'Halfway to your calorie goal',
+        subtitle: `${amount(total)} of ${amount(goal)} logged today`,
+        value: `${percent}%`,
+        tone: water ? 'water' : 'calories',
+        duration: REMINDER_DURATION,
+        page: water ? 'water' : 'calories',
+    };
+}
+
+/** A quiet, distinct peek when the selected city's prayer time arrives. */
+export function prayerTime({id, prayer, time, city}) {
+    const name = {Fajr: 'Subuh', Dhuhr: 'Dzuhur', Asr: 'Ashar', Isha: 'Isya'}[prayer] ?? prayer ?? 'Prayer';
+    return {
+        key: `prayer:${id}`,
+        icon: 'isle-prayer',
+        motion: 'rise',
+        title: name,
+        subtitle: city ? `It’s time to pray · ${city}` : 'It’s time to pray',
+        value: time ?? null,
+        tone: 'prayer',
+        duration: REMINDER_DURATION,
+        page: 'prayer',
+    };
+}
+
 /** The meeting service a link goes to, by its host. */
 function meetingService(link) {
     const host = (/^https:\/\/([^/]+)/.exec(link)?.[1] ?? '').toLowerCase();

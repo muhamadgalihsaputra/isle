@@ -92,6 +92,13 @@ const INTERFACES = {
             <property name="Entries" type="s" access="read"/>`),
         properties: {Entries: 'calorieEntries'},
     },
+    water: {
+        xml: node('Water1', `
+            <method name="Drink"><arg name="amount_ml" type="u" direction="in"/><arg type="t" direction="out"/></method>
+            <method name="Remove"><arg name="id" type="t" direction="in"/></method>
+            <property name="Entries" type="s" access="read"/>`),
+        properties: {Entries: 'waterEntries'},
+    },
     prayer: {
         xml: node('Prayer1', `
             <method name="SetLocation"><arg name="city" type="s" direction="in"/><arg name="country" type="s" direction="in"/></method>

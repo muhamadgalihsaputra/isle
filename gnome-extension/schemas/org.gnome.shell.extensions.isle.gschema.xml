@@ -295,6 +295,21 @@
       <default>true</default>
       <summary>Play a sound when a focus session or break ends</summary>
     </key>
+    <key name="calorie-goal" type="i">
+      <range min="500" max="10000"/>
+      <default>2000</default>
+      <summary>Daily calorie goal</summary>
+    </key>
+    <key name="water-goal-ml" type="i">
+      <range min="500" max="5000"/>
+      <default>2000</default>
+      <summary>Daily water goal</summary>
+    </key>
+    <key name="water-serving-ml" type="i">
+      <range min="100" max="1000"/>
+      <default>250</default>
+      <summary>Amount logged by the Drink button</summary>
+    </key>
     <key name="prayer-city" type="s">
       <default>'Jakarta'</default>
       <summary>City for prayer times</summary>

@@ -313,7 +313,15 @@ export default class IslePreferences extends ExtensionPreferences {
             title: 'Calories',
             description: 'Log food and calories in the island. Entries stay on this computer.',
         });
+        calories.add(spinRow(settings, 'calorie-goal', 'Daily calorie goal', 'Used by the progress ring', 500, 10000, 50));
         page.add(calories);
+        const water = new Adw.PreferencesGroup({
+            title: 'Water tracker',
+            description: 'Choose the daily goal and how much one Drink tap logs.',
+        });
+        water.add(spinRow(settings, 'water-goal-ml', 'Daily water goal (ml)', 'Shown in the tracker', 500, 5000, 250));
+        water.add(spinRow(settings, 'water-serving-ml', 'Amount per drink (ml)', 'Logged by the Drink button', 100, 1000, 50));
+        page.add(water);
         return page;
     }
 
@@ -931,8 +939,8 @@ function choiceRow(settings, key, title, subtitle, choices) {
     return row;
 }
 
-function spinRow(settings, key, title, subtitle, min, max) {
-    const row = Adw.SpinRow.new_with_range(min, max, 1);
+function spinRow(settings, key, title, subtitle, min, max, step = 1) {
+    const row = Adw.SpinRow.new_with_range(min, max, step);
     row.title = title;
     row.subtitle = subtitle;
     settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);

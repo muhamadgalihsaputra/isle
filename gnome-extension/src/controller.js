@@ -32,23 +32,13 @@ import {PeekView} from './peek.js';
 import * as Playback from './playback.js';
 import {KeyboardWatcher, OsdHook, TopBar} from './shell.js';
 import {ShelfHelper} from './shelfHelper.js';
-import {CallPage} from './pages/call.js';
-import {CalendarPage} from './pages/calendar.js';
-import {CaloriesPage} from './pages/calories.js';
-import {PrayerPage} from './pages/prayer.js';
-import {MediaPage} from './pages/media.js';
-import {NotificationsPage} from './pages/notifications.js';
-import {ShelfPage} from './pages/shelf.js';
-import {TasksPage} from './pages/tasks.js';
-import {TimerPage} from './pages/timer.js';
-import {UsagePage} from './pages/usage.js';
-import {PrayerWatcher, ReminderWatcher} from './reminders.js';
+import {PrayerWatcher, ReminderWatcher, WellbeingWatcher} from './reminders.js';
 import {GREETING, InstalledApps, UNDO_MS, VoiceView, stopUnit, actionTypes, aiSettings, openSetUp, openSignIn, runActions, signInHint, stopPending, voiceContext} from './voice.js';
 import {TextWriter} from './writer.js';
 
 /** While the pointer rests before the island opens (Settings: hover-delay), it moves at most this far (CSS px). */
 const REST_DISTANCE_PX = 10;
-/** The views and pages are laid out ahead this long after starting, a step at a time (see `_warmUp`). */
+/** A warm-up waiting for the island to close retries after this long (see `_warmUp`). */
 const WARM_START_MS = 3000;
 const WARM_STEP_MS = 60;
 /** What the alert views are laid out with ahead (see `_warmUp`): the parts most alerts have. */
@@ -160,6 +150,7 @@ export class Controller {
         this._queue = [];
         this._keyboardGrab = null;
         this._pagePickedAt = 0;
+        this._hasOpened = false;
         this._lastTrack = null;
         this._tint = null;
         this._tintStyle = null;
@@ -196,34 +187,65 @@ export class Controller {
         /** The window text was last selected in, so a selection only goes to the AI from where it was made. */
         this._selectedIn = null;
 
-        // Built a part at a time, frames drawn in between: all at once, it held the screen still for a tenth
-        // of a second at every login and unlock. Nothing outside calls in before the last part.
+        // Show the compact island first, then load and build its heavier pages in the background.
         this._pages = [];
         this._buildSteps = [
             () => this._buildServices(),
             () => this._buildViews(),
-            // A page a step: the music and shelf pages alone take a frame's time.
-            ...this._pageMakers().map(make => () => this._pages.push(make())),
+            // Show the resting island before constructing its heavier pages below.
+            () => this._buildInitialIsland(),
+            // Load and build one page at a time after the compact island is on screen.
+            ...this._pageMakers().map(make => async () => {
+                const page = await make();
+                if (page && this._destroying)
+                    page.destroy();
+                else if (page)
+                    this._pages.push(page);
+            }),
             () => (this._expanded = this._buildExpanded(this._pages)),
             () => this._buildIsland(),
             () => this._connectAll(),
         ];
+        this._buildPending = false;
+        this._scheduleBuildStep();
+    }
+
+    /** Runs each build step in its own idle callback; page imports may finish asynchronously. */
+    _scheduleBuildStep() {
+        if (this._destroying || this._failed || this._building || this._buildPending || !this._buildSteps.length)
+            return;
         this._building = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            try {
-                this._buildSteps.shift()();
-            } catch (e) {
-                // A part failing (on a GNOME that changed under it) leaves no half-built island: what was built goes.
-                console.warn(`Isle: could not start: ${e.message}\n${e.stack}`);
-                this._building = 0;
-                this._failed = true;
-                this._destroyPartial();
-                return GLib.SOURCE_REMOVE;
-            }
-            if (this._buildSteps.length)
-                return GLib.SOURCE_CONTINUE;
             this._building = 0;
+            if (this._destroying)
+                return GLib.SOURCE_REMOVE;
+            try {
+                const pending = this._buildSteps.shift()();
+                if (pending && typeof pending.then === 'function') {
+                    this._buildPending = true;
+                    pending.then(() => {
+                        this._buildPending = false;
+                        this._scheduleBuildStep();
+                    }, error => {
+                        this._buildPending = false;
+                        this._failBuild(error);
+                    });
+                } else {
+                    this._scheduleBuildStep();
+                }
+            } catch (e) {
+                this._failBuild(e);
+            }
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    _failBuild(error) {
+        if (this._destroying || this._failed)
+            return;
+        // A part failing (on a GNOME that changed under it) leaves no half-built island.
+        console.warn(`Isle: could not start: ${error.message}\n${error.stack}`);
+        this._failed = true;
+        this._destroyPartial();
     }
 
     _buildServices() {
@@ -253,14 +275,41 @@ export class Controller {
         this._voice.chatLook = this._botLook;
     }
 
-    // The bar and the island appear together: the clock gives way to it in the same frame.
-    _buildIsland() {
+    // Put the light, resting view on screen before constructing the pages behind it.
+    _buildInitialIsland() {
         this._topBar = new TopBar(this._settings);
+        this._island.addView(this._compact);
+        Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
+
+        this._monitor = this._wantedMonitor();
+        const scale = uiScale();
+        const top = this._onBar ? this._topBar.height : 0;
+        const inBar = this._onBar && this._settings.get_boolean('island-in-top-bar');
+        this._island.topInset = this._blendsIn ? top : 0;
+        this._island.monitor = this._monitor;
+        this._topBar.clockShown = !this._onBar;
+        this._compact.inBar = inBar;
+
+        const size = {
+            width: this._compact.preferredWidth,
+            height: inBar ? top : top + this._settings.get_int('notch-depth') * scale,
+            radius: (inBar ? IN_BAR_RADIUS : COMPACT_RADIUS) * scale,
+            shoulder: (inBar ? IN_BAR_SHOULDER : COMPACT_SHOULDER) * scale,
+        };
+        this._compact.set_size(size.width, size.height);
+        this._compact.style = inBar ? null : `padding-top: ${top / scale}px;`;
+        if (this._onBar)
+            this._topBar.reserveWidth(this._compact.preferredWidth);
+        this._island.morph(size, this._compact);
+        this._syncFullscreen();
+    }
+
+    // The bar and all views are ready; connect the larger views to the island.
+    _buildIsland() {
         this._shelf = this._expanded.pageNamed('shelf');
         this._shelfHelper = new ShelfHelper(this._island, this._shelf);
-        for (const view of [this._compact, ...this._peeks, this._expanded, this._voice])
+        for (const view of [...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
-        Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         this._updateGeometry();
         this._render();
     }
@@ -304,8 +353,10 @@ export class Controller {
             }));
         });
         this._prayer = new PrayerWatcher(this._daemon, this._settings, prayer => {
-            this._post(Alerts.reminder(prayer, () => this._chime('complete')));
+            this._post(Alerts.prayerTime(prayer));
         });
+        this._wellbeing = new WellbeingWatcher(this._daemon, this._settings,
+            milestone => this._post(Alerts.wellbeingMilestone(milestone)));
         this._syncVoiceEnabled();
         this._syncUsage();
         this._syncPrayer();
@@ -314,30 +365,40 @@ export class Controller {
         if (this._island.hovered)
             this._onHoverChanged();
         this._render();
-        this._later('warm', WARM_START_MS, () => this._warmUp(true));
         this._daemon.release();
     }
 
     /** Makes each page, in tab order. */
     _pageMakers() {
         const size = {height: PAGE_HEIGHT};
+        const page = (path, name, args) => import(path).then(module => {
+            if (this._destroying)
+                return null;
+            const PageClass = module[name];
+            return new PageClass(...args);
+        });
         return [
-            () => new CallPage(this._daemon, this._call, this._privacy, this._settings, size),
-            () => new MediaPage(this._daemon, this._audio, size),
-            () => new NotificationsPage(this._daemon, this._notifications, size),
-            () => new TimerPage(this._daemon, size),
-            () => new TasksPage(this._daemon, size),
-            () => new ShelfPage(this._daemon, this._clipboard, this._settings, size),
-            () => new CalendarPage(this._daemon, size),
-            () => new CaloriesPage(this._daemon, size),
-            () => new PrayerPage(this._daemon, size),
-            () => new UsagePage(this._daemon, size),
+            () => page('./pages/call.js', 'CallPage', [this._daemon, this._call, this._privacy, this._settings, size]),
+            () => page('./pages/media.js', 'MediaPage', [this._daemon, this._audio, size]),
+            () => page('./pages/notifications.js', 'NotificationsPage', [this._daemon, this._notifications, size]),
+            () => page('./pages/timer.js', 'TimerPage', [this._daemon, size]),
+            () => page('./pages/tasks.js', 'TasksPage', [this._daemon, size]),
+            () => page('./pages/shelf.js', 'ShelfPage', [this._daemon, this._clipboard, this._settings, size]),
+            () => page('./pages/calendar.js', 'CalendarPage', [this._daemon, size]),
+            () => page('./pages/calories.js', 'CaloriesPage', [this._daemon, this._settings, size]),
+            () => page('./pages/water.js', 'WaterPage', [this._daemon, this._settings, size]),
+            () => page('./pages/prayer.js', 'PrayerPage', [this._daemon, size]),
+            () => page('./pages/usage.js', 'UsagePage', [this._daemon, size]),
         ];
     }
 
     _buildExpanded(pages) {
         for (const page of pages) {
             page.connect('request-keyboard', (_page, wanted) => this._setKeyboard(wanted));
+            page.connect('settings-requested', () => {
+                this.collapse();
+                this._extension.openPreferences();
+            });
             page.connect('request-close', () => this.collapse());
             page.connect('cold', () => this._scheduleWarm());
         }
@@ -414,6 +475,8 @@ export class Controller {
             if (this._presentation === 'compact')
                 this._render();
         });
+        this._compact.connect('assistant-requested', () => this._openAssistantFromCompact());
+        this._compact.connect('assistant-hovered', () => this._openAssistantFromCompact(true));
 
         this._settingsChanged = ['notch-depth', 'island-in-top-bar'].map(key =>
             this._settings.connect(`changed::${key}`, () => this._render()));
@@ -458,6 +521,18 @@ export class Controller {
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
+        });
+        // Catch Escape before a focused entry or scroll view can consume it. While the assistant has the
+        // keyboard, or its conversation is open, Esc always returns to the resting island without a click.
+        this._escapeCapture = global.stage.connect('captured-event', (_stage, event) => {
+            if (event.type() !== Clutter.EventType.KEY_PRESS || event.get_key_symbol() !== Clutter.KEY_Escape ||
+                !this._voiceOpen || (!this._voice.chatOpen && !this._keyboardGrab))
+                return Clutter.EVENT_PROPAGATE;
+            if (this._voice.cardWaiting && !this._voice.typing)
+                this._voice.decideCard(false);
+            else
+                this.collapse();
+            return Clutter.EVENT_STOP;
         });
         this._monitorsChanged = Main.layoutManager.connect('monitors-changed', () => this._updateGeometry());
         // Another scale (display settings, a display of another one): every size is laid out again.
@@ -589,10 +664,10 @@ export class Controller {
             }, this._sharing));
         });
         notifications.connect('dnd-changed', () => (this._compact.doNotDisturb = notifications.dnd));
-        notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
-        notifications.connect('seen-changed', () => (this._compact.unseenNotifications = notifications.unseenCount > 0));
+        notifications.connect('changed', () => (this._compact.unseenNotifications = notifications.unseenCount));
+        notifications.connect('seen-changed', () => (this._compact.unseenNotifications = notifications.unseenCount));
         this._compact.doNotDisturb = notifications.dnd;
-        this._compact.unseenNotifications = notifications.unseenCount > 0;
+        this._compact.unseenNotifications = notifications.unseenCount;
     }
 
     // Layout
@@ -924,7 +999,7 @@ export class Controller {
 
     /** Lays out the pages that changed out of sight, once the island has rested closed a while. */
     _scheduleWarm() {
-        if (this._presentation !== 'compact' || !this._island.mapped || this._timeouts.has('warm') ||
+        if (!this._hasOpened || this._presentation !== 'compact' || !this._island.mapped || this._timeouts.has('warm') ||
             !this._expanded.pages.some(page => page.cold))
             return;
         const sinceLast = GLib.get_monotonic_time() / 1000 - (this._warmedAt ?? -Infinity);
@@ -1053,7 +1128,9 @@ export class Controller {
             const [nowX, nowY] = global.get_pointer();
             // The assistant still at work: its progress, rather than the pages (as a click does).
             const rested = Math.hypot(nowX - x, nowY - y) <= px(REST_DISTANCE_PX);
-            if (rested && this._voiceWorking)
+            if (rested && this._voiceBound && this._compact.pointerOnAssistant(nowX, nowY))
+                return; // The face has its own hover delay and opens the assistant directly.
+            else if (rested && this._voiceWorking)
                 this._reopenVoice({byHover: true});
             else if (rested)
                 this.expand();
@@ -1223,6 +1300,7 @@ export class Controller {
         // An action finishing after Isle was turned off.
         if (this._destroying)
             return;
+        this._hasOpened = true;
         // A close still pending (the pointer just left) would shut it again.
         this._cancel('expand');
         this._cancel('collapse');
@@ -1621,7 +1699,25 @@ export class Controller {
         if (enabled)
             this._viewsWarm = false;
         this._expanded.voiceEnabled = enabled;
+        this._compact.voiceEnabled = enabled;
         this._voice.shortcut = this._voiceShortcut;
+    }
+
+    _openAssistantFromCompact(byHover = false) {
+        if (!this._voiceBound) {
+            this.collapse();
+            this._extension.openPreferences();
+            return;
+        }
+        const working = this._voiceWorking;
+        if (working)
+            this._reopenVoice({byHover});
+        else
+            this._openVoice({typing: true, byHover});
+        if (byHover && working && this._history.length) {
+            this._voice.setHistory(this._history);
+            this._voice.openChat();
+        }
     }
 
     // The shortcut (or the face) opens the assistant listening; while listening it finishes,
@@ -1650,7 +1746,7 @@ export class Controller {
 
     // Opened by Super+I it listens; with `typing` (opened with the mouse) the field is ready instead, and an
     // ongoing conversation shows above it.
-    _openVoice({typing = false} = {}) {
+    _openVoice({typing = false, byHover = false} = {}) {
         if (!this._voiceBound)
             return;
         // Opened again before the last answer's actions ran: they belonged to that one.
@@ -1662,7 +1758,7 @@ export class Controller {
         this._expandWanted = false;
         this._shelveAnswer();
         this._voiceOpen = true;
-        this._voiceByHover = false;
+        this._voiceByHover = byHover;
         this._voiceInBackground = false;
         this._voiceTurn = this._daemon.state.assistant?.turn ?? 0;
         this._voiceStep = this._daemon.state.assistant?.step ?? 0;
@@ -1671,9 +1767,13 @@ export class Controller {
         this._voice.closeChat();
         if (!typing) {
             this._listen({greet: true});
+            if (this._history.length) {
+                this._voice.setHistory(this._history);
+                this._voice.openChat();
+            }
             return;
         }
-        this._startTyping('');
+        this._startTyping('', {focus: !byHover, byHover});
         this._warm();
         if (this._history.length) {
             this._voice.setHistory(this._history);
@@ -1693,21 +1793,22 @@ export class Controller {
     }
 
     /** Types the request instead of saying it: listening stops (speech recognition never starts). */
-    _startTyping(initial) {
+    _startTyping(initial, {focus = true, byHover = false} = {}) {
         // Closed, it would take the keyboard from the windows unseen.
         if (!this._voiceOpen)
             return;
-        this._voiceByHover = false;
+        this._voiceByHover = byHover;
         if (this._listenSent || this._daemon.state.assistant?.phase === 'listening')
             this._daemon.call('assistant', 'Cancel');
         this._listenSent = false;
         this._listenRequest++;
         this._cancel('voice-close');
         this._cancel('voice-listen');
-        this._setKeyboard(true);
+        if (focus)
+            this._setKeyboard(true);
         this._voice.followUp = null;
         this._voice.greeting = null;
-        this._voice.startTyping(initial, this._daemon.state.assistant?.card);
+        this._voice.startTyping(initial, this._daemon.state.assistant?.card, {focus});
         this._render();
     }
 
@@ -1719,6 +1820,8 @@ export class Controller {
             this._voice.setHistory([...this._history, {role: 'user', text, at: Date.now()}]);
         const request = ++this._listenRequest;
         this._voice.setState({phase: 'thinking', heard: text});
+        // The text is already sent: keep the answer visible without holding the desktop modal while it thinks.
+        this._setKeyboard(false);
         this._render();
         let json;
         try {
@@ -1890,6 +1993,10 @@ export class Controller {
             runActions(state.actions, this._voiceActions()).then(results =>
                 this._daemon.call('assistant', 'Results', step, JSON.stringify(results)));
         }
+        // Keep the modal only while the mic is listening. Transcription, generation and tool work happen
+        // asynchronously; the user can use other apps while Isle keeps showing progress.
+        if (this._voiceOpen && ['transcribing', 'thinking', 'acting'].includes(state.phase))
+            this._setKeyboard(false);
         this._syncAssistantBusy();
         if (!this._voiceOpen) {
             this._onAssistantInBackground(state);
@@ -2223,8 +2330,9 @@ export class Controller {
         if (this._failed)
             return;
         // Turned off while still being built (locked at once): only what was built goes.
-        if (this._building) {
-            GLib.source_remove(this._building);
+        if (this._building || this._buildPending) {
+            if (this._building)
+                GLib.source_remove(this._building);
             this._building = 0;
             this._destroyPartial();
             return;
@@ -2237,6 +2345,7 @@ export class Controller {
         global.display.get_selection().disconnect(this._primaryChanged);
         global.display.disconnect(this._focusChanged);
         global.display.disconnect(this._focusMonitorChanged);
+        global.stage.disconnect(this._escapeCapture);
         stopPending();
         if (this._voiceBound)
             Main.wm.removeKeybinding('voice-shortcut');
@@ -2269,6 +2378,7 @@ export class Controller {
         this._shelfHelper.destroy();
         this._reminders.destroy();
         this._prayer.destroy();
+        this._wellbeing.destroy();
         // Ending focus mode can turn Do Not Disturb off, which the views
         // still show.
         this._focusMode.destroy();
@@ -2288,10 +2398,11 @@ export class Controller {
         Format.release();
     }
 
-    /** Frees what the steps of building (see the constructor) made before it was turned off: nothing
-     * outside knows of it yet, but for what it built. */
+    /** Frees the parts built so far if startup is interrupted; the compact island may already be on screen. */
     _destroyPartial() {
         this._destroying = true;
+        this._buildPending = false;
+        this._buildSteps = [];
         for (const name of [...this._timeouts.keys()])
             this._cancel(name);
         // What the last step had connected before it failed (see `_connectAll`).
@@ -2301,6 +2412,8 @@ export class Controller {
             global.display.get_selection().disconnect(this._primaryChanged);
         for (const id of [this._focusChanged, this._focusMonitorChanged].filter(Boolean))
             global.display.disconnect(id);
+        if (this._escapeCapture)
+            global.stage.disconnect(this._escapeCapture);
         if (this._voiceBound)
             Main.wm.removeKeybinding('voice-shortcut');
         this._setKeyboard(false);
@@ -2317,7 +2430,7 @@ export class Controller {
         for (const part of [this._osd, this._keyboard, this._reminders, this._installedApps])
             part?.destroy();
         this._shelfHelper?.destroy();
-        // The views are the island's once it is on screen (see `_buildIsland`); before, each goes by itself.
+        // The views belong to the island as soon as the compact view is shown (see `_buildInitialIsland`).
         if (!this._island?.get_parent()) {
             for (const view of [this._compact, ...this._peeks ?? [], this._voice, this._expanded])
                 view?.destroy();
