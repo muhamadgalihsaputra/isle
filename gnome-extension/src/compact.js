@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 // The resting island: clock left, the assistant's attentive face in the middle, and
-// the most useful live status on the right.
+// the most useful live status on the right. Disabled pages do not leave their status behind.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -34,9 +35,11 @@ export function timerColor(phase) {
     return phase === 'focus' || phase === 'idle' ? Palette.WHITE : Palette.GREEN;
 }
 
+/** The closed island's contents; emits `width-changed` when it needs another width. */
 export const CompactView = GObject.registerClass({
     Signals: {'width-changed': {}, 'assistant-requested': {}, 'assistant-hovered': {}},
 }, class CompactView extends St.Widget {
+    /** `privacy` and `call` are the shell's recording and call watchers. */
     _init(daemon, settings, privacy, call) {
         super._init({
             style_class: 'isle-compact',
@@ -142,6 +145,7 @@ export const CompactView = GObject.registerClass({
                 this._refresh();
         });
         this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
+        this._pagesChanged = settings.connect('changed::hidden-pages', () => this._refresh());
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
         this._callChanged = call.connect('changed', () => this._refresh());
         this.connect('notify::mapped', () => {
@@ -184,6 +188,7 @@ export const CompactView = GObject.registerClass({
         return Math.ceil(2 * sideWidth + px(size.center + size.gap + size.padding));
     }
 
+    /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */
     _showingPrivacy() {
         return this._settings.get_boolean('privacy-indicators') && this._privacy.any;
     }
@@ -210,6 +215,7 @@ export const CompactView = GObject.registerClass({
         return Boolean(this._isServiceDown);
     }
 
+    /** Set by the controller's service watch. */
     set serviceDown(down) {
         if (down === Boolean(this._isServiceDown))
             return;
@@ -273,12 +279,12 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
-    /** While the user is away the music bars rest; nobody is watching them. */
-    /** Whether the user is away (no input for a while); the bars rest meanwhile. */
+    /** Whether the user is away (no input for a while); the bars rest meanwhile, nobody is watching. */
     get idle() {
         return this._idle;
     }
 
+    /** Starts or rests the bars. */
     set idle(idle) {
         this._idle = idle;
         this._assistant.alive = this.mapped && !idle;
@@ -289,11 +295,14 @@ export const CompactView = GObject.registerClass({
         this._syncBars();
     }
 
+    /** Picks what each side shows, and emits `width-changed` when the island needs another width. */
     _refresh() {
         const {nowPlaying, pomodoro} = this._daemon.state;
         const playing = Playback.isPlaying(nowPlaying);
-        const hasTrack = Playback.hasTrack(nowPlaying);
-        const timerActive = Boolean(pomodoro && pomodoro.phase !== 'idle');
+        // A paused song stays until its player closes; none with the Music page left out.
+        const hasTrack = Playback.hasTrack(nowPlaying) && !this._settings.get_strv('hidden-pages').includes('music');
+        const focusVisible = !this._settings.get_strv('hidden-pages').includes('focus');
+        const timerActive = Boolean(pomodoro && pomodoro.phase !== 'idle' && focusVisible);
         const recording = this._privacy.recording;
         const onCall = this._call.active;
         // Show every live status in a stable priority order. The island grows to fit the row;
@@ -378,6 +387,7 @@ export const CompactView = GObject.registerClass({
             this._cancel('timer');
     }
 
+    /** The timer ring's progress, redrawn every few seconds while it shows. */
     _refreshRing() {
         const {pomodoro} = this._daemon.state;
         if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped || !this._timerStatus.visible) {
@@ -392,8 +402,10 @@ export const CompactView = GObject.registerClass({
             this._later('ring', RING_REFRESH_S * 1000, () => this._refreshRing());
     }
 
+    /** Bars dance only when on screen, the user is here and the song plays. */
     _syncBars() {
-        this._bars.playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
+        this._bars.playing = this.mapped && !this._idle &&
+            !this._settings.get_strv('hidden-pages').includes('music') && Playback.isPlaying(this._daemon.state.nowPlaying);
     }
 
     /** Shows how long the screen has been recording, once a second while on screen. */
@@ -418,7 +430,7 @@ export const CompactView = GObject.registerClass({
         this._later('call', 1000 - (elapsedMs % 1000) + 10, () => this._tickCall());
     }
 
-    /** Updates the clock, then sleeps until the minute changes. */
+    /** Sets the clock's text; `watchClock` calls it again as the minute changes. */
     _tickClock() {
         this._clock.text = Format.clockTime();
         const date = Format.longDate();
@@ -431,6 +443,7 @@ export const CompactView = GObject.registerClass({
         }
     }
 
+    /** Runs `callback` once after `ms`, replacing any timeout of the same name. */
     _later(name, ms, callback) {
         this._cancel(name);
         this._timeouts[name] = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.max(0, Math.round(ms)), () => {
@@ -440,6 +453,7 @@ export const CompactView = GObject.registerClass({
         });
     }
 
+    /** Drops the timeout of that name, if any. */
     _cancel(name) {
         if (this._timeouts[name]) {
             GLib.source_remove(this._timeouts[name]);
@@ -474,6 +488,7 @@ export const CompactView = GObject.registerClass({
             palette: paletteFor(this._settings.get_string('bot-color'), this._settings.get_string('bot-glow'))};
     }
 
+    /** Stops timers and signals, and destroys the signs not in a slot right now. */
     _onDestroy() {
         this._destroyed = true;
         if (this._widthChangedIdle) {
@@ -487,6 +502,7 @@ export const CompactView = GObject.registerClass({
         this._daemon.disconnect(this._daemonChanged);
         this._settings.disconnect(this._settingsChanged);
         this._settings.disconnect(this._openOnChanged);
+        this._settings.disconnect(this._pagesChanged);
         for (const id of this._botLookChanged)
             this._settings.disconnect(id);
         this._privacy.disconnect(this._privacyChanged);

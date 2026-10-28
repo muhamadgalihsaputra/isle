@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 // Shows isled's reminders when they are due. isled keeps them until shown, so one that fell due
 // while the screen was locked (and Isle was off) shows as soon as Isle is back.
@@ -90,6 +91,7 @@ export class WellbeingWatcher {
     }
 }
 
+/** Watches isled's reminder list and hands each due one to the island once. */
 export class ReminderWatcher {
     /** `onDue({id, text}, done)` shows a reminder that is due, and calls `done` once it was on screen. */
     constructor(daemon, onDue) {
@@ -104,6 +106,7 @@ export class ReminderWatcher {
         this._sync();
     }
 
+    /** Shows what is due now and sets a timer for the next one. */
     _sync() {
         if (this._timeout) {
             GLib.source_remove(this._timeout);
@@ -132,6 +135,7 @@ export class ReminderWatcher {
         });
     }
 
+    /** Stops the timer and lets go of isled's signal. */
     destroy() {
         if (this._timeout)
             GLib.source_remove(this._timeout);

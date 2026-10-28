@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
-//! The assistant's "brain": whichever AI CLI the user has and picked (agy, Claude Code or Codex), behind one
+//! The assistant's "brain": whichever AI CLI the user has and picked (agy, Claude Code, Codex or Grok), behind one
 //! face. Each runs with the user's own sign-in, kept to answering; isled runs the tools and actions itself.
 
 use std::path::{Path, PathBuf};
@@ -11,14 +12,17 @@ use super::agy::{self, Agy};
 use super::answer::Answer;
 use super::claude::Claude;
 use super::codex::Codex;
+use super::grok::Grok;
 use super::omp::Omp;
 use super::openai::Client as ApiClient;
 
+/// An AI CLI the assistant can run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
     Agy,
     Claude,
     Codex,
+    Grok,
     Hermes,
     OpenAi,
     OhMyPi,
@@ -26,9 +30,10 @@ pub enum Provider {
 
 /// Tried in this order when the user picked "auto", signed-in ones first. agy comes last: its terms bar
 /// third-party tools, so it answers only when it is all there is, or picked.
-const AUTO: [Provider; 6] = [
+const AUTO: [Provider; 7] = [
     Provider::Claude,
     Provider::Codex,
+    Provider::Grok,
     Provider::Hermes,
     Provider::OpenAi,
     Provider::OhMyPi,
@@ -36,11 +41,13 @@ const AUTO: [Provider; 6] = [
 ];
 
 impl Provider {
+    /// Its id in Settings and in saved state.
     pub fn id(self) -> &'static str {
         match self {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex",
+            Provider::Grok => "grok",
             Provider::Hermes => "hermes",
             Provider::OpenAi => "openai-compatible",
             Provider::OhMyPi => "oh-my-pi",
@@ -53,17 +60,20 @@ impl Provider {
             Provider::Agy => "Antigravity",
             Provider::Claude => "Claude Code",
             Provider::Codex => "Codex",
+            Provider::Grok => "Grok",
             Provider::Hermes => "Hermes",
             Provider::OpenAi => "OpenAI-compatible API",
             Provider::OhMyPi => "Oh My Pi",
         }
     }
 
+    /// The program's file name.
     fn command(self) -> &'static str {
         match self {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex",
+            Provider::Grok => "grok",
             Provider::Hermes | Provider::OpenAi => "",
             Provider::OhMyPi => "omp",
         }
@@ -92,6 +102,7 @@ impl Provider {
                 super::codex::user_auth().exists()
                     || std::env::var_os("OPENAI_API_KEY").is_some_and(|key| !key.is_empty())
             }
+            Provider::Grok => super::grok::signed_in(),
             Provider::Hermes => super::openai::Client::hermes_configured(),
             Provider::OpenAi => super::openai::byok_configured(),
             Provider::OhMyPi => self.program().is_some(),
@@ -104,13 +115,14 @@ impl Provider {
             Provider::Agy => "agy",
             Provider::Claude => "claude",
             Provider::Codex => "codex login",
+            Provider::Grok => "grok login",
             Provider::Hermes => "hermes gateway",
             Provider::OpenAi => "configure ISLE_OPENAI_BASE_URL and ISLE_OPENAI_API_KEY",
             Provider::OhMyPi => "omp",
         }
     }
 
-    /// The provider with id `id` ("agy", "claude", "codex").
+    /// The provider with its id from Settings, or `None` if it is unknown.
     pub fn from_id(id: &str) -> Option<Provider> {
         AUTO.into_iter().find(|p| p.id() == id)
     }
@@ -121,7 +133,8 @@ impl Provider {
         self != Provider::Agy
     }
 
-    pub fn all() -> [Provider; 6] {
+    /// Every provider, in "auto" order.
+    pub fn all() -> [Provider; 7] {
         AUTO
     }
 
@@ -132,7 +145,7 @@ impl Provider {
         }
     }
 
-    /// `wanted` ("agy", "claude", "codex" or "auto"), if installed; for "auto", the first installed and
+    /// `wanted` (a provider id or "auto"), if installed; for "auto", the first installed and
     /// signed in, else the first installed (which then asks to sign in).
     pub fn pick(wanted: &str) -> Option<Provider> {
         let installed = |p: &Provider| p.available();
@@ -193,6 +206,7 @@ fn dirs_in(home: &Path, env_dir: impl Fn(&str) -> Option<PathBuf>) -> Vec<PathBu
         home.join(".fnm/aliases/default/bin"),
         // Claude Code's own older install, mise and asdf, yarn, Homebrew on Linux, Nix.
         home.join(".claude/local"),
+        home.join(".grok/bin"),
         home.join(".local/share/mise/shims"),
         home.join(".asdf/shims"),
         home.join(".yarn/bin"),
@@ -229,10 +243,12 @@ fn npm_prefix(home: &Path, from_env: Option<PathBuf>) -> Option<PathBuf> {
     set.is_absolute().then(|| set.join("bin"))
 }
 
+/// The running CLI behind the assistant, whichever it is.
 pub enum Brain {
     Agy(Agy),
     Claude(Claude),
     Codex(Codex),
+    Grok(Grok),
     Api(Provider, ApiClient),
     Omp(Omp),
 }
@@ -275,6 +291,9 @@ impl Brain {
             Provider::Codex => {
                 Brain::Codex(Codex::start(&program, model, resume, workspace, instructions).await?)
             }
+            Provider::Grok => {
+                Brain::Grok(Grok::start(&program, model, resume, workspace, instructions).await?)
+            }
             Provider::Hermes | Provider::OpenAi | Provider::OhMyPi => {
                 unreachable!("providers handled above")
             }
@@ -285,16 +304,18 @@ impl Brain {
     pub async fn warm(&mut self) -> anyhow::Result<()> {
         match self {
             Brain::Codex(codex) => codex.warm().await,
-            Brain::Agy(_) | Brain::Claude(_) | Brain::Api(_, _) => Ok(()),
+            Brain::Agy(_) | Brain::Claude(_) | Brain::Grok(_) | Brain::Api(_, _) => Ok(()),
             Brain::Omp(omp) => omp.warm().await,
         }
     }
 
+    /// Which CLI this is.
     pub fn provider(&self) -> Provider {
         match self {
             Brain::Agy(_) => Provider::Agy,
             Brain::Claude(_) => Provider::Claude,
             Brain::Codex(_) => Provider::Codex,
+            Brain::Grok(_) => Provider::Grok,
             Brain::Api(provider, _) => *provider,
             Brain::Omp(_) => Provider::OhMyPi,
         }
@@ -312,6 +333,7 @@ impl Brain {
             Brain::Agy(agy) => agy.ask(prompt, activity).await,
             Brain::Claude(claude) => claude.ask(prompt, activity, draft).await,
             Brain::Codex(codex) => codex.ask(prompt, activity, draft).await,
+            Brain::Grok(grok) => grok.ask(prompt, activity, draft).await,
             Brain::Api(_, client) => client.ask(prompt, activity, draft).await,
             Brain::Omp(omp) => omp.ask(prompt, activity, draft).await,
         }
@@ -323,6 +345,7 @@ impl Brain {
             Brain::Agy(agy) => agy.conversation.clone(),
             Brain::Claude(claude) => claude.conversation.clone(),
             Brain::Codex(codex) => codex.conversation.clone(),
+            Brain::Grok(grok) => grok.conversation.clone(),
             Brain::Api(_, _) => None,
             Brain::Omp(omp) => omp.conversation(),
         }
@@ -334,6 +357,7 @@ impl Brain {
             Provider::Agy => agy::forget(id),
             Provider::Claude => super::claude::forget(id),
             Provider::Codex => super::codex::forget(id),
+            Provider::Grok => super::grok::forget(id),
             Provider::Hermes | Provider::OpenAi => {}
             Provider::OhMyPi => Omp::forget(id),
         }
@@ -344,6 +368,7 @@ impl Brain {
         agy::prune(today);
         super::claude::prune(today);
         super::codex::prune(today);
+        super::grok::prune(today);
     }
 }
 
@@ -359,6 +384,7 @@ pub struct Failure {
 }
 
 impl From<(&str, &str)> for Failure {
+    /// Just words: nothing to sign in to or set up.
     fn from((error, hint): (&str, &str)) -> Self {
         Self {
             error: error.into(),

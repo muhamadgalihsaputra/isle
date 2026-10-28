@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 // GNOME's notifications via the island, which replaces the clock where GNOME shows them. Hides GNOME's
 // banners and emits `banner` by GNOME's rules; Do Not Disturb is GNOME's own "show banners" setting.
@@ -9,9 +10,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import * as Signals from 'resource:///org/gnome/shell/misc/signals.js';
 
-/** Signals: `changed` (): the list changed (and so maybe the unseen set); `seen-changed` (): only which are
- * seen changed; `updated` (): one changed in place; `banner` (notification): to show, then acknowledge once
- * shown; `dnd-changed` (). */
+/** Signals: `changed` (the list), `seen-changed` (only what is seen), `updated` (one changed in place),
+ * `banner` (notification: show it, then acknowledge it) and `dnd-changed`. */
 export class NotificationCenter extends Signals.EventEmitter {
     /** `isleSettings` says whether GNOME keeps its own banners (`gnome-banners`). */
     constructor(isleSettings) {
@@ -38,6 +38,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         return all.sort((a, b) => b.datetime.compare(a.datetime));
     }
 
+    /** How many are not seen yet. */
     get unseenCount() {
         let count = 0;
         for (const source of this._sources.keys())
@@ -45,14 +46,17 @@ export class NotificationCenter extends Signals.EventEmitter {
         return count;
     }
 
+    /** Whether the unread dot shows. */
     get hasUnseen() {
         return [...this._sources.keys()].some(source => source.notifications.some(n => !n.acknowledged));
     }
 
+    /** Do Not Disturb: GNOME's "show banners" turned off. */
     get dnd() {
         return !this._settings.get_boolean('show-banners');
     }
 
+    /** Writes GNOME's own setting, so the top bar's switch agrees. */
     set dnd(on) {
         this._settings.set_boolean('show-banners', !on);
     }
@@ -66,6 +70,7 @@ export class NotificationCenter extends Signals.EventEmitter {
             this.emit('seen-changed');
     }
 
+    /** Dismisses every notification the user may dismiss. */
     clearAll() {
         // Resident notifications (e.g. a running download) cannot be dismissed.
         for (const notification of this.notifications.filter(n => !n.resident))
@@ -77,6 +82,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         return this._isleSettings.get_boolean('gnome-banners');
     }
 
+    /** Blocks or unblocks GNOME's banners to match the setting. */
     _syncBanners() {
         if (this._gnomeBanners && this._blocking)
             this._unblockBanners();
@@ -105,6 +111,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         tray._updateState();
     }
 
+    // Drops the override and hands the tray back the block others asked for.
     _unblockBanners() {
         this._blocking = false;
         delete this._tray.bannerBlocked;
@@ -112,6 +119,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         this._tray.bannerBlocked = this._requestedBlock;
     }
 
+    /** Follows a source's notifications coming, going and asking for banners. */
     _watch(source) {
         if (this._sources.has(source))
             return;
@@ -127,6 +135,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         this.emit('changed');
     }
 
+    /** Stops following a source that went away. */
     _unwatch(source) {
         const ids = this._sources.get(source);
         if (!ids)
@@ -149,6 +158,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         }
     }
 
+    /** Whether it is still in the list, not dismissed meanwhile. */
     _listed(notification) {
         const source = notification.source;
         return this._sources.has(source) && source.notifications.includes(notification);
@@ -177,6 +187,7 @@ export class NotificationCenter extends Signals.EventEmitter {
         this.emit('seen-changed');
     }
 
+    /** Disconnects everything and gives GNOME its banners back. */
     destroy() {
         // Tell no one about changes made while tearing down.
         this.disconnectAll();

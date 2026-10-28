@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 zickrian
 
 // Reminders: a completion summary beside the task list. Finished rows stay checked until midnight.
 
@@ -50,14 +51,17 @@ export function onHover(actor, callback) {
  * height, and a box takes a wrapped title's minimum as one line. */
 const ReminderRow = GObject.registerClass(
 class ReminderRow extends St.BoxLayout {
+    /** Natural height as the minimum too. */
     vfunc_get_preferred_height(forWidth) {
         const [, natural] = super.vfunc_get_preferred_height(forWidth);
         return [natural, natural];
     }
 });
 
+// The reminder list, kept in isled's todo store.
 export const TasksPage = GObject.registerClass(
 class TasksPage extends Page {
+    /** `height` is the expanded island's page height. */
     _init(daemon, {height}) {
         super._init(daemon, {
             style_class: 'isle-page isle-reminders',
@@ -103,6 +107,7 @@ class TasksPage extends Page {
         this._update();
     }
 
+    /** Open and done alike, as isled has them. */
     _tasks() {
         return this.daemon.state.tasks ?? [];
     }
@@ -194,6 +199,7 @@ class TasksPage extends Page {
         return row;
     }
 
+    /** The + button: into the new row's field, scrolled into view. */
     _focusNew() {
         this._newRow.visible = true;
         this._empty.visible = false;
@@ -202,6 +208,7 @@ class TasksPage extends Page {
         this._revealNew();
     }
 
+    /** Scrolls to the bottom once the list has laid out. */
     _revealNew() {
         this.later('reveal-new', 40, () => {
             const adjustment = this._scroll.vadjustment;
@@ -209,6 +216,7 @@ class TasksPage extends Page {
         });
     }
 
+    /** Sends the typed title to isled. */
     async _add() {
         const text = this._entry.text.trim();
         if (!text)
@@ -218,6 +226,7 @@ class TasksPage extends Page {
         this._revealNew();
     }
 
+    /** Clears the field and gives the keyboard back if it had it. */
     _stopAdding() {
         const hadFocus = this._entry.clutter_text.has_key_focus();
         this._entry.text = '';
@@ -229,6 +238,7 @@ class TasksPage extends Page {
 
     // Showing
 
+    /** Brings the rows in line with isled's list, unless a rename or a tick is under way. */
     _update() {
         this._syncProgress();
         if (this._renaming !== null || this._leaving.size > 0)
@@ -305,6 +315,7 @@ class TasksPage extends Page {
         });
     }
 
+    /** One reminder: tick ring, title (click to rename), hover × and hairline. */
     _row(task) {
         // Never y_expand: its column fills it, and once a child changes (a rename) the row would ask to
         // expand too and take all the list's room.
@@ -472,6 +483,7 @@ class TasksPage extends Page {
 
     // Renaming
 
+    /** Swaps the title for a field; Enter or a click away saves, Esc cancels. */
     _startRenaming(titleBox, title, task) {
         const entry = new St.Entry({style_class: 'isle-reminder-field', text: task.title, x_expand: true, can_focus: true});
         titleBox.replace_child(title, entry);
@@ -517,6 +529,7 @@ class TasksPage extends Page {
             this.emit('request-keyboard', false);
     }
 
+    /** Ends whatever was under way, so the list is settled next time. */
     onDeactivate() {
         this._stopAdding();
         // Nothing in the middle of anything: the list stays as it is, with no rebuild as the page goes.
