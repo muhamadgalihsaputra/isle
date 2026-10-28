@@ -99,7 +99,6 @@ export const CompactView = GObject.registerClass({
         this._notificationStatus.add_child(this._notificationIcon);
         this._notificationStatus.add_child(this._notificationCount);
         this._left.add_child(this._timerStatus);
-        this._left.add_child(this._notificationStatus);
 
         this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
         this._assistant.y_align = Clutter.ActorAlign.CENTER;
@@ -130,9 +129,9 @@ export const CompactView = GObject.registerClass({
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._rightSpacer = new St.Widget({x_expand: true});
         this._right.add_child(this._rightSpacer);
-        this._leftStatusItems = [this._timerStatus, this._notificationStatus];
-        this._rightStatusItems = [this._serviceDown, this._recordingStatus, this._callStatus, this._musicStatus,
-            this._restDate, this._privacyDots];
+        this._leftStatusItems = [this._timerStatus];
+        this._rightStatusItems = [this._serviceDown, this._recordingStatus, this._callStatus,
+            this._notificationStatus, this._musicStatus, this._restDate, this._privacyDots];
         for (const item of this._rightStatusItems)
             this._right.add_child(item);
 
@@ -193,7 +192,7 @@ export const CompactView = GObject.registerClass({
         return this._settings.get_boolean('privacy-indicators') && this._privacy.any;
     }
 
-    /** Shows the unread count when there is room on the right. */
+    /** Shows the unread count on the right beside the other live statuses. */
     set unseenNotifications(unseen) {
         unseen = Number(unseen) || 0;
         if (unseen === this._unseen)
@@ -309,18 +308,18 @@ export const CompactView = GObject.registerClass({
         // service failure replaces the statuses with a single warning.
         const leftStatuses = this._isServiceDown ? [] : [
             timerActive && this._timerStatus,
-            this._unseen > 0 && this._notificationStatus,
         ].filter(Boolean);
         const rightStatuses = this._isServiceDown ? [this._serviceDown] : [
             recording && this._recordingStatus,
             onCall && this._callStatus,
+            this._unseen > 0 && this._notificationStatus,
             hasTrack && this._musicStatus,
         ].filter(Boolean);
         for (const item of this._leftStatusItems)
             item.visible = leftStatuses.includes(item);
         for (const item of this._rightStatusItems)
             item.visible = item === this._privacyDots || rightStatuses.includes(item) ||
-                (item === this._restDate && !rightStatuses.length);
+                (item === this._restDate && !this._isServiceDown);
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
         this._micOff.visible = onCall && this._call.muted;
 
