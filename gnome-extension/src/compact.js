@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The resting island: the clock flanked by live activities (recording, call or timer
-// left, music right, privacy dots far right), a moon before it during Do Not Disturb.
-// A paused song keeps its cover. A second activity takes the right side: the timer's
-// or a call's time, or the music bars.
+// The resting island: clock left, the assistant's attentive face in the middle, and
+// the most useful live status on the right.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -12,23 +10,21 @@ import St from 'gi://St';
 
 import {paletteFor} from './bot.js';
 import {BotIcon} from './botIcon.js';
-import {onUiScale, px, uiScale} from './compat.js';
+import {onUiScale, px} from './compat.js';
 import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
 import {watchClock} from './wallClock.js';
-import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt} from './widgets.js';
+import {Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt, label} from './widgets.js';
 
-/** The assistant at work, in the right slot. */
-const ASSISTANT_SIZE = 18;
+/** The assistant at rest, in the centre. */
+const ASSISTANT_SIZE = 26;
 
 /** Sizes hanging below the top bar, and inside it with smaller text, in CSS pixels. */
 const SIZES = {
-    hanging: {clock: 164, activities: 256, art: 24, artRadius: 6, ring: 20, bars: 16, moon: 14, call: 15},
-    inBar: {clock: 144, activities: 232, art: 22, artRadius: 6, ring: 18, bars: 14, moon: 13, call: 14},
+    hanging: {side: 72, center: 34, padding: 32, gap: 16, ring: 20, bars: 16, moon: 14, call: 15},
+    inBar: {side: 72, center: 30, padding: 28, gap: 16, ring: 18, bars: 14, moon: 13, call: 14},
 };
-/** Between the Do Not Disturb moon and the time, in CSS pixels (as .isle-compact-clock-box's spacing). */
-const MOON_GAP = 6;
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
@@ -39,7 +35,7 @@ export function timerColor(phase) {
 }
 
 export const CompactView = GObject.registerClass({
-    Signals: {'width-changed': {}},
+    Signals: {'width-changed': {}, 'assistant-requested': {}, 'assistant-hovered': {}},
 }, class CompactView extends St.Widget {
     _init(daemon, settings, privacy, call) {
         super._init({
@@ -52,73 +48,94 @@ export const CompactView = GObject.registerClass({
         this._call = call;
         this._idle = false;
         this._inBar = false;
+        this._voiceEnabled = false;
         this._timeouts = {};
+        this._assistantPointerMotion = 0;
+        this._widthChangedIdle = 0;
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
         this._row = row;
         this.add_child(row);
 
-        this._left = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
+        this._left = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-clock-side', x_expand: false,
+            y_align: Clutter.ActorAlign.CENTER});
+        this._clock = label('', 'isle-compact-clock');
+        this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 14, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        this._clockBox = new St.BoxLayout({style_class: 'isle-compact-clock-box', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER});
+        this._clockBox.add_child(this._moon);
+        this._clockBox.add_child(this._clock);
+        this._left.add_child(this._clockBox);
+
+        this._restDate = label('', 'isle-compact-rest-date', {y_align: Clutter.ActorAlign.CENTER});
+
         this._ring = new Ring({size: 20, lineWidth: 3});
-        this._art = new Art({size: 24, radius: 6});
-        this._dot = new St.Widget({style_class: 'isle-unseen-dot', y_align: Clutter.ActorAlign.CENTER});
         this._recordingDot = new RecordingDot();
-        // A call: a green phone, and on the right a red microphone while it is muted.
-        this._phone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
+        this._recordingTime = label('', 'isle-compact-status-time isle-compact-recording-time');
+        this._callIcon = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
+        this._callTime = label('', 'isle-compact-status-time isle-compact-call-time');
         this._micOff = new St.Icon({gicon: icon('isle-mic-off-symbolic'), icon_size: 15, style_class: 'isle-call-muted', y_align: Clutter.ActorAlign.CENTER});
-        // isled is not running: what needs it cannot work (see the controller's service watch).
+        this._timerTime = label('', 'isle-compact-status-time');
         this._serviceDown = new St.Icon({gicon: icon('dialog-warning-symbolic'), icon_size: 15, style_class: 'isle-compact-warning', y_align: Clutter.ActorAlign.CENTER});
-        // The assistant at work with the island closed: still, but for a blink and a glance every few seconds.
+        this._notificationIcon = new St.Icon({gicon: icon('isle-bell'), icon_size: 15, y_align: Clutter.ActorAlign.CENTER});
+        this._notificationCount = label('', 'isle-compact-notification-count');
+        this._bars = new Bars({height: 16});
+
+        this._recordingStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
+        this._recordingStatus.add_child(this._recordingDot);
+        this._recordingStatus.add_child(this._recordingTime);
+        this._callStatus = new St.BoxLayout({style_class: 'isle-compact-status-item isle-compact-call-status', y_align: Clutter.ActorAlign.CENTER});
+        this._callStatus.add_child(this._callIcon);
+        this._callStatus.add_child(this._callTime);
+        this._callStatus.add_child(this._micOff);
+        this._timerStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
+        this._timerStatus.add_child(this._ring);
+        this._timerStatus.add_child(this._timerTime);
+        this._musicStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
+        this._musicStatus.add_child(this._bars);
+        this._notificationStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
+        this._notificationStatus.add_child(this._notificationIcon);
+        this._notificationStatus.add_child(this._notificationCount);
+        this._left.add_child(this._timerStatus);
+        this._left.add_child(this._notificationStatus);
+
         this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
         this._assistant.y_align = Clutter.ActorAlign.CENTER;
+        this._assistantButton = new St.Button({style_class: 'isle-compact-assistant-button', child: this._assistant,
+            can_focus: true, track_hover: true, accessible_name: 'AI assistant', y_align: Clutter.ActorAlign.CENTER});
+        this._assistantButton.connect('clicked', () => {
+            this._cancel('assistant-hover');
+            this.emit('assistant-requested');
+        });
+        this._assistantButton.connect('motion-event', () => {
+            const [x, y] = global.get_pointer();
+            this._assistant.lookAtPointer(x, y);
+            return Clutter.EVENT_PROPAGATE;
+        });
+        this._assistantButton.connect('notify::hover', () => {
+            if (this._assistantButton.hover) {
+                const [x, y] = global.get_pointer();
+                this._assistant.lookAtPointer(x, y);
+                this._scheduleAssistantHover();
+            } else {
+                this._cancel('assistant-hover');
+            }
+        });
+        this._openOnChanged = settings.connect('changed::open-on', () => this._scheduleAssistantHover());
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
-
-        const center = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
-        const times = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
-        this._clock = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        // How long the screen has been recording, in place of the clock.
-        this._elapsed = new St.Label({style_class: 'isle-compact-clock', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
-        // How long the call has lasted, in green.
-        this._callTime = new St.Label({style_class: 'isle-compact-clock isle-compact-call-time', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER, visible: false});
-        times.add_child(this._clock);
-        times.add_child(this._elapsed);
-        times.add_child(this._callTime);
-        // Do Not Disturb: a moon before the time (or what takes its place), as iOS shows a Focus, whatever the sides hold.
-        this._moon = new St.Icon({gicon: icon('isle-moon'), icon_size: 14, style_class: 'isle-dnd-moon', y_align: Clutter.ActorAlign.CENTER, visible: false});
-        const centerRow = new St.BoxLayout({style_class: 'isle-compact-clock-box', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-        centerRow.add_child(this._moon);
-        centerRow.add_child(times);
-        center.add_child(centerRow);
-
-        this._right = new St.Bin({style_class: 'isle-compact-slot', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
-        this._bars = new Bars({height: 16});
-        // A second activity on the right, its time as large as the clock and level with it: the timer's
-        // time left (beside the song's bars while one plays), or a call's phone and length.
-        this._secondBars = new Bars({height: 16});
-        this._secondTimer = this._secondPart(this._secondBars, 'isle-compact-second');
-        this._secondPhone = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, y_align: Clutter.ActorAlign.CENTER});
-        this._secondCall = this._secondPart(this._secondPhone, 'isle-compact-second isle-compact-second-call');
-        /** How much wider the right side is than a slot, while it holds a second time (balanced on the left). */
-        this._secondExtra = 0;
-
         this._privacyDots = new PrivacyDots();
-        // Each side's sign keeps to its edge, so all sit as far in from the island's ends. The slots are
-        // told not to expand, or their children's x_expand (which the alignment needs) would widen them.
-        const align = (actors, x_align) => actors.forEach(actor => actor.set({x_align, x_expand: true}));
-        align([this._ring, this._art, this._dot, this._recordingDot, this._phone], Clutter.ActorAlign.START);
-        align([this._bars, this._micOff, this._serviceDown, this._assistant, this._secondTimer, this._secondCall], Clutter.ActorAlign.END);
+        this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
+        this._rightSpacer = new St.Widget({x_expand: true});
+        this._right.add_child(this._rightSpacer);
+        this._leftStatusItems = [this._timerStatus, this._notificationStatus];
+        this._rightStatusItems = [this._serviceDown, this._recordingStatus, this._callStatus, this._musicStatus,
+            this._restDate, this._privacyDots];
+        for (const item of this._rightStatusItems)
+            this._right.add_child(item);
 
-        // As wide as the privacy dots at the far right, so the clock stays centred.
-        this._privacyBalance = new St.Widget({visible: false});
-        row.add_child(this._privacyBalance);
         row.add_child(this._left);
-        // As much wider than a slot as the second activity on the right, so the clock stays centred.
-        this._secondBalance = new St.Widget({visible: false});
-        row.add_child(this._secondBalance);
-        row.add_child(center);
+        row.add_child(this._assistantButton);
         row.add_child(this._right);
-        row.add_child(this._privacyDots);
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
             if (['nowPlaying', 'pomodoro'].includes(key))
@@ -127,16 +144,18 @@ export const CompactView = GObject.registerClass({
         this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
         this._callChanged = call.connect('changed', () => this._refresh());
-        // Music bars only dance, and the times and the timer's ring only tick, while this view is on screen.
         this.connect('notify::mapped', () => {
+            this._assistant.alive = this.mapped && !this._idle;
+            if (this.mapped && !this._idle)
+                this._startAssistantPointerTracking();
+            else
+                this._stopAssistantPointerTracking();
             this._syncBars();
             this._tickCall();
             this._tickRecording();
+            this._tickTimer();
             this._refreshRing();
-            this._tickSecond();
-            // Measure what could not be off screen: the privacy dots' balance, a second time's width.
-            const second = this._right.child === this._secondTimer || this._right.child === this._secondCall;
-            if (this.mapped && ((this._privacyBalance.visible && !this._privacyBalance.width) || second))
+            if (this.mapped)
                 this._refresh();
         });
         this._tickClock();
@@ -150,36 +169,28 @@ export const CompactView = GObject.registerClass({
     /** The width the island should have to fit what is shown. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
-        const privacy = this._privacyWidth();
-        // With nothing beside the clock, the island widens for the moon; beside an activity there is room.
-        const moon = this._moon.visible ? size.moon + MOON_GAP : 0;
-        return px(this._left.child || this._right.child ? size.activities : size.clock + moon) + privacy + 2 * this._secondExtra;
-    }
-
-    _secondPart(sign, styleClass) {
-        const box = new St.BoxLayout({style_class: styleClass, y_align: Clutter.ActorAlign.CENTER});
-        box.add_child(sign);
-        box._time = new St.Label({style_class: 'isle-compact-second-time', y_align: Clutter.ActorAlign.CENTER});
-        box.add_child(box._time);
-        return box;
-    }
-
-    /** Room for the privacy dots and their balance on the other side (none inside a slot). */
-    _privacyWidth() {
-        // Off the stage (as when Isle starts mid-call) nothing can be measured yet.
-        if (!this._privacyDots.visible || this._privacyDots.get_parent() !== this._row || !this.get_stage())
-            return 0;
-        const [, dots] = this._privacyDots.get_preferred_width(-1);
-        const spacing = this._row.get_theme_node().get_length('spacing');
-        return 2 * Math.ceil(dots + spacing);
+        const leftItems = [this._clockBox, ...this._leftStatusItems.filter(item => item.visible)];
+        const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
+            px(this._inBar ? 5 : 6) * Math.max(0, leftItems.length - 1);
+        // Each side stays equally wide, keeping the assistant centered; measure the right contents directly
+        // because `_right.width` is fixed to that balanced side width.
+        const visibleStatuses = this._rightStatusItems.filter(item => item.visible);
+        const spacing = px(6); // Matches `.isle-compact-status`; stays measurable before the view is staged.
+        const rightWidth = visibleStatuses.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
+            spacing * visibleStatuses.length;
+        const sideWidth = Math.max(px(size.side), leftWidth, rightWidth);
+        this._left.width = sideWidth;
+        this._right.width = sideWidth;
+        return Math.ceil(2 * sideWidth + px(size.center + size.gap + size.padding));
     }
 
     _showingPrivacy() {
         return this._settings.get_boolean('privacy-indicators') && this._privacy.any;
     }
 
-    /** Shows a dot for unseen notifications when nothing else is on the left. */
+    /** Shows the unread count when there is room on the right. */
     set unseenNotifications(unseen) {
+        unseen = Number(unseen) || 0;
         if (unseen === this._unseen)
             return;
         this._unseen = unseen;
@@ -190,11 +201,8 @@ export const CompactView = GObject.registerClass({
     set doNotDisturb(on) {
         if (on === this._moon.visible)
             return;
-        // Measured before it shows: the clock alone makes room for it (see `preferredWidth`).
-        const widthBefore = this.preferredWidth;
         this._moon.visible = on;
-        if (this.preferredWidth !== widthBefore)
-            this.emit('width-changed');
+        this._refresh();
     }
 
     /** Shows that isled is not running, on the right before anything else. */
@@ -209,12 +217,42 @@ export const CompactView = GObject.registerClass({
         this._refresh();
     }
 
-    /** Shows that the assistant works on a request, on the right, first of all. */
+    /** The centred face changes expression while the assistant works. */
     set assistantBusy(busy) {
         if (busy === Boolean(this._assistantBusy))
             return;
         this._assistantBusy = busy;
+        this._assistant.form = busy ? 'thinking' : 'attentive';
         this._refresh();
+    }
+
+    set voiceEnabled(enabled) {
+        this._voiceEnabled = enabled;
+        this._assistantButton.accessible_name = enabled ? 'AI assistant' : 'Turn on AI assistant in Settings';
+        if (!enabled)
+            this._cancel('assistant-hover');
+    }
+
+    _scheduleAssistantHover() {
+        this._cancel('assistant-hover');
+        if (!this._voiceEnabled || !this.mapped || !this._assistantButton.hover ||
+            this._settings.get_string('open-on') !== 'hover')
+            return;
+        this._later('assistant-hover', this._settings.get_int('hover-delay'), () => {
+            if (this._voiceEnabled && this.mapped && this._assistantButton.hover &&
+                this._settings.get_string('open-on') === 'hover')
+                this.emit('assistant-hovered');
+        });
+    }
+
+    pointerOnAssistant(x, y) {
+        let actor = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE, x, y);
+        while (actor) {
+            if (actor === this._assistantButton)
+                return true;
+            actor = actor.get_parent();
+        }
+        return false;
     }
 
     /** Fits the view inside the top bar, like a notch, or below it. */
@@ -223,11 +261,11 @@ export const CompactView = GObject.registerClass({
             return;
         this._inBar = inBar;
         const size = SIZES[inBar ? 'inBar' : 'hanging'];
-        this._art.resize(size.art, size.artRadius);
         this._ring.resize(size.ring);
-        this._bars.maxHeight = this._secondBars.maxHeight = size.bars;
+        this._bars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
-        this._phone.icon_size = this._micOff.icon_size = this._secondPhone.icon_size = size.call;
+        this._callIcon.icon_size = this._micOff.icon_size = size.call;
+        this._assistantButton.set_size(px(size.center), px(size.center));
         if (inBar)
             this.add_style_class_name('isle-compact-in-bar');
         else
@@ -243,175 +281,106 @@ export const CompactView = GObject.registerClass({
 
     set idle(idle) {
         this._idle = idle;
+        this._assistant.alive = this.mapped && !idle;
+        if (this.mapped && !idle)
+            this._startAssistantPointerTracking();
+        else
+            this._stopAssistantPointerTracking();
         this._syncBars();
     }
 
     _refresh() {
         const {nowPlaying, pomodoro} = this._daemon.state;
         const playing = Playback.isPlaying(nowPlaying);
-        // A paused song stays until its player closes.
         const hasTrack = Playback.hasTrack(nowPlaying);
-        const timerActive = pomodoro && pomodoro.phase !== 'idle';
+        const timerActive = Boolean(pomodoro && pomodoro.phase !== 'idle');
         const recording = this._privacy.recording;
         const onCall = this._call.active;
-        const widthBefore = this.preferredWidth;
+        // Show every live status in a stable priority order. The island grows to fit the row;
+        // service failure replaces the statuses with a single warning.
+        const leftStatuses = this._isServiceDown ? [] : [
+            timerActive && this._timerStatus,
+            this._unseen > 0 && this._notificationStatus,
+        ].filter(Boolean);
+        const rightStatuses = this._isServiceDown ? [this._serviceDown] : [
+            recording && this._recordingStatus,
+            onCall && this._callStatus,
+            hasTrack && this._musicStatus,
+        ].filter(Boolean);
+        for (const item of this._leftStatusItems)
+            item.visible = leftStatuses.includes(item);
+        for (const item of this._rightStatusItems)
+            item.visible = item === this._privacyDots || rightStatuses.includes(item) ||
+                (item === this._restDate && !rightStatuses.length);
+        this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
+        this._micOff.visible = onCall && this._call.muted;
 
-        // The first activity that applies keeps the island: recording, a call, the music, the timer. The
-        // next takes the right side.
-        const activities = [recording && 'recording', onCall && 'call', hasTrack && 'music', timerActive && 'timer']
-            .filter(Boolean);
-        const [primary, second] = activities;
-        // Left: the activity's sign, else the unread dot. Both slots keep their width when empty, so the centre
-        // stays centred.
-        let left = {recording: this._recordingDot, call: this._phone, music: this._art, timer: this._ring}[primary] ?? null;
-        if (!left && this._unseen)
-            left = this._dot;
-        if (this._left.child !== left)
-            this._left.child = left;
-        let right = primary === 'music' ? this._bars : null;
-        if (second)
-            right = {music: this._bars, timer: this._secondTimer, call: this._secondCall}[second];
-        if (onCall && this._call.muted)
-            right = this._micOff;
-        if (this._assistantBusy)
-            right = this._assistant;
-        this._assistant.alive = right === this._assistant;
-        if (this._isServiceDown)
-            right = this._serviceDown;
         // On a call the green phone already says the microphone is on, unless another app records too.
         const privacy = this._showingPrivacy() ? this._privacy : {};
-        const microphone = privacy.microphone && (!onCall || this._call.othersRecording);
-        const dots = {camera: privacy.camera, microphone, screenShare: privacy.screenShare};
-        this._privacyDots.update(dots);
-        // Beside an activity, up to two dots take the empty right slot, so the island grows no wider.
-        const shown = Object.values(dots).filter(Boolean).length;
-        const inSlot = shown > 0 && shown <= 2 && Boolean(left) && !right;
-        if (inSlot) {
-            right = this._privacyDots;
-            if (this._privacyDots.get_parent() === this._row)
-                this._row.remove_child(this._privacyDots);
-        }
-        if (this._right.child !== right)
-            this._right.child = right;
-        // The song's bars beside the timer's time, while the song is the first activity; set before
-        // the right side is measured.
-        this._secondBars.visible = primary === 'music' && second === 'timer';
-        this._tickSecond();
-        this._balanceSecond(right);
-        if (!inSlot && !this._privacyDots.get_parent())
-            this._row.add_child(this._privacyDots);
-        if (inSlot)
-            this._privacyDots.add_style_class_name('isle-privacy-dots-in-slot');
-        else
-            this._privacyDots.remove_style_class_name('isle-privacy-dots-in-slot');
-        // Paused: the bars rest, dimmed. Eased only to a change: each refresh ran two 200 ms eases to nothing.
-        for (const bars of [this._bars, this._secondBars]) {
-            const opacity = playing ? 255 : PAUSED_OPACITY;
-            if (!restsAt(bars, 'opacity', opacity))
-                bars.ease({opacity, duration: 200});
-        }
-        this._syncBars();
-        const outside = this._privacyDots.visible && !inSlot;
-        this._privacyBalance.visible = outside;
-        // Measured only when shown: hidden, it may not be on the stage yet.
-        this._privacyBalance.width = outside && this.get_stage() ? this._privacyDots.get_preferred_width(-1)[1] : 0;
+        this._privacyDots.update({
+            camera: privacy.camera,
+            microphone: privacy.microphone && (!onCall || this._call.othersRecording),
+            screenShare: privacy.screenShare,
+        });
 
+        const opacity = playing ? 255 : PAUSED_OPACITY;
+        if (!restsAt(this._bars, 'opacity', opacity))
+            this._bars.ease({opacity, duration: 200});
+        this._syncBars();
         if (timerActive) {
             this._ring.color = timerColor(pomodoro.phase);
             this._refreshRing();
         } else {
             this._cancel('ring');
+            this._cancel('timer');
         }
-        if (hasTrack)
-            this._art.setPath(nowPlaying.art_path);
-
-        if (recording) {
-            this._crossfade(this._elapsed);
+        if (recording)
             this._tickRecording();
-        } else {
+        else
             this._cancel('recording');
-            this._crossfade(onCall ? this._callTime : this._clock);
-        }
         this._tickCall();
+        this._tickTimer();
 
-        if (this.preferredWidth !== widthBefore)
-            this.emit('width-changed');
+        // Visibility and text changes queue a relayout. Re-render on idle so the controller reads natural
+        // sizes after St has processed the new statuses; an immediate measurement can still be cached.
+        this.queue_relayout();
+        if (this.mapped)
+            this._queueWidthChanged();
     }
 
-    /** Fades `actor` in and the other centre actors out. */
-    _crossfade(actor) {
-        for (const other of [this._clock, this._elapsed, this._callTime]) {
-            if (other === actor) {
-                if (!other.visible) {
-                    other.opacity = 0;
-                    other.show();
-                }
-                if (!restsAt(other, 'opacity', 255))
-                    other.ease({opacity: 255, duration: 200});
-            } else if (other.visible) {
-                other.ease({opacity: 0, duration: 150, onComplete: () => other.hide()});
-            }
-        }
+    _queueWidthChanged() {
+        if (this._widthChangedIdle)
+            return;
+        this._widthChangedIdle = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._widthChangedIdle = 0;
+            if (!this._destroyed)
+                this.emit('width-changed');
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
-    /** Widens the right slot to the second time it holds, and the left side by as much. */
-    _balanceSecond(right) {
-        const time = right === this._secondTimer || right === this._secondCall;
-        // Measured only on the stage; off it, the next refresh there does it.
-        const width = time && this.get_stage() ? Math.ceil(right.get_preferred_width(-1)[1]) : 0;
-        const slot = px(SIZES[this._inBar ? 'inBar' : 'hanging'].art);
-        const spacing = width ? this._row.get_theme_node().get_length('spacing') : 0;
-        this._secondExtra = width ? Math.max(0, width - slot) : 0;
-        // CSS, which St scales: measured in stage pixels, it is set in CSS ones.
-        this._right.style = width ? `width: ${width / uiScale()}px;` : null;
-        this._secondBalance.visible = this._secondExtra > spacing;
-        this._secondBalance.width = Math.max(0, this._secondExtra - spacing);
-    }
-
-    /** The second activity's time, each second while on screen. */
-    _tickSecond() {
-        const part = this._right.child;
-        // Set off screen too, so its width can be measured; it ticks only on screen.
-        if (part !== this._secondTimer && part !== this._secondCall) {
-            this._cancel('second');
+    /** The focus time, call length and recording length tick only while shown. */
+    _tickTimer() {
+        const {pomodoro} = this._daemon.state;
+        if (!pomodoro || pomodoro.phase === 'idle' || !this._timerStatus.visible || !this.mapped) {
+            this._cancel('timer');
             return;
         }
-        let next;
-        const length = part._time.text.length;
-        if (part === this._secondTimer) {
-            const {pomodoro} = this._daemon.state;
-            if (!pomodoro || pomodoro.phase === 'idle')
-                return;
-            const remaining = pomodoro.running ? Math.max(0, pomodoro.ends_at_ms - Format.nowMs()) : pomodoro.remaining_ms;
-            const [r, g, b] = timerColor(pomodoro.phase);
-            part._time.text = Format.duration(remaining);
-            // Restyled only when the phase changes, not each second.
-            const style = `color: rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)});`;
-            if (part._time.style !== style)
-                part._time.style = style;
-            next = pomodoro.running ? remaining % 1000 || 1000 : 0;
-        } else {
-            const elapsedMs = (GLib.get_monotonic_time() - this._call.since) / 1000;
-            part._time.text = Format.duration(elapsedMs);
-            next = 1000 - (elapsedMs % 1000);
-        }
-        // Longer or shorter (59:59 to 1:00:00): the side is measured again, or the time would be cut.
-        if (part._time.text.length !== length && this.mapped) {
-            const widthBefore = this.preferredWidth;
-            this._balanceSecond(part);
-            if (this.preferredWidth !== widthBefore)
-                this.emit('width-changed');
-        }
-        if (next && this.mapped)
-            this._later('second', next + 10, () => this._tickSecond());
+        const remaining = pomodoro.running ? Math.max(0, pomodoro.ends_at_ms - Format.nowMs()) : pomodoro.remaining_ms;
+        this._timerTime.text = Format.duration(remaining);
+        const [r, g, b] = timerColor(pomodoro.phase);
+        const style = `color: rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)});`;
+        if (this._timerTime.style !== style)
+            this._timerTime.style = style;
+        if (pomodoro.running)
+            this._later('timer', remaining % 1000 || 1000, () => this._tickTimer());
         else
-            this._cancel('second');
+            this._cancel('timer');
     }
 
     _refreshRing() {
         const {pomodoro} = this._daemon.state;
-        // Only while it shows: the timer may be on the right instead.
-        if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped || this._left.child !== this._ring) {
+        if (!pomodoro || pomodoro.phase === 'idle' || !this.mapped || !this._timerStatus.visible) {
             this._cancel('ring');
             return;
         }
@@ -424,9 +393,7 @@ export const CompactView = GObject.registerClass({
     }
 
     _syncBars() {
-        const playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
-        this._bars.playing = playing;
-        this._secondBars.playing = playing && this._secondBars.visible && this._right.child === this._secondTimer;
+        this._bars.playing = this.mapped && !this._idle && Playback.isPlaying(this._daemon.state.nowPlaying);
     }
 
     /** Shows how long the screen has been recording, once a second while on screen. */
@@ -436,7 +403,7 @@ export const CompactView = GObject.registerClass({
             return;
         }
         const elapsedMs = (GLib.get_monotonic_time() - this._privacy.recordingSince) / 1000;
-        this._elapsed.text = Format.duration(elapsedMs);
+        this._recordingTime.text = Format.duration(elapsedMs);
         this._later('recording', 1000 - (elapsedMs % 1000) + 10, () => this._tickRecording());
     }
 
@@ -454,6 +421,14 @@ export const CompactView = GObject.registerClass({
     /** Updates the clock, then sleeps until the minute changes. */
     _tickClock() {
         this._clock.text = Format.clockTime();
+        const date = Format.longDate();
+        if (date !== this._restDate.text) {
+            this._restDate.text = date;
+            if (this.mapped) {
+                this.queue_relayout();
+                this._queueWidthChanged();
+            }
+        }
     }
 
     _later(name, ms, callback) {
@@ -472,6 +447,27 @@ export const CompactView = GObject.registerClass({
         }
     }
 
+    /** Keep the resting face aware of the desktop pointer, even when it is outside the notch. */
+    _startAssistantPointerTracking() {
+        if (this._assistantPointerMotion || !this.mapped || this._idle)
+            return;
+        const followPointer = (_stage, event) => {
+            const [x, y] = event.get_coords();
+            this._assistant.lookAtPointer(x, y);
+            return Clutter.EVENT_PROPAGATE;
+        };
+        const [x, y] = global.get_pointer();
+        this._assistant.lookAtPointer(x, y);
+        this._assistantPointerMotion = global.stage.connect('motion-event', followPointer);
+    }
+
+    _stopAssistantPointerTracking() {
+        if (!this._assistantPointerMotion)
+            return;
+        global.stage.disconnect(this._assistantPointerMotion);
+        this._assistantPointerMotion = 0;
+    }
+
     /** The assistant's shape and colours, from Settings (see bot.js). */
     _botLook() {
         return {shape: this._settings.get_string('bot-shape'),
@@ -479,20 +475,21 @@ export const CompactView = GObject.registerClass({
     }
 
     _onDestroy() {
+        this._destroyed = true;
+        if (this._widthChangedIdle) {
+            GLib.source_remove(this._widthChangedIdle);
+            this._widthChangedIdle = 0;
+        }
         this._stopClock();
+        this._stopAssistantPointerTracking();
         for (const name of Object.keys(this._timeouts))
             this._cancel(name);
         this._daemon.disconnect(this._daemonChanged);
         this._settings.disconnect(this._settingsChanged);
+        this._settings.disconnect(this._openOnChanged);
         for (const id of this._botLookChanged)
             this._settings.disconnect(id);
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
-        // Slots may hold actors that are not currently children.
-        for (const actor of [this._ring, this._art, this._dot, this._recordingDot, this._bars, this._phone, this._micOff, this._assistant, this._serviceDown,
-            this._secondTimer, this._secondCall]) {
-            if (!actor.get_parent())
-                actor.destroy();
-        }
     }
 });

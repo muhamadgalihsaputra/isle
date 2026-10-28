@@ -479,8 +479,8 @@ export const ChatView = GObject.registerClass({
         header.add_child(this._title);
         header.add_child(iconButton('isle-plus-symbolic', 'isle-button-flat isle-chat-new', () => this.emit('new-chat'),
             {size: 13, accessibleName: 'New chat'}));
-        header.add_child(iconButton('isle-chevron-down-symbolic', 'isle-button-flat isle-chat-new', () => this.emit('close'),
-            {size: 13, accessibleName: 'Hide the conversation'}));
+        header.add_child(iconButton('isle-close-symbolic', 'isle-button-flat isle-chat-close', () => this.emit('close'),
+            {size: 13, accessibleName: 'Close assistant'}));
         this.add_child(header);
         this._list = new St.BoxLayout({...VERTICAL, style_class: 'isle-chat-list', x_expand: true});
         this._scroll = new St.ScrollView({

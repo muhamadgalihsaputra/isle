@@ -18,7 +18,7 @@ import {TILES, describeActions, failed, namesProject, outcomeOf, runnable, slots
 import {Bot} from './bot.js';
 import {ChatView, CommandCard, answerMarkup, elapsed} from './chat.js';
 import {isTerminal} from './clipboard.js';
-import {VERTICAL, eventActor, maximize, onUiScale, px, uiScale, unmaximize} from './compat.js';
+import {VERTICAL, maximize, onUiScale, px, uiScale, unmaximize} from './compat.js';
 import {plainBody} from './notifications.js';
 import {cornerClose, icon, iconButton, pillButton, revealClose, wrapLines} from './widgets.js';
 
@@ -355,7 +355,7 @@ export const VoiceView = GObject.registerClass({
         this._chat = new ChatView();
         this._chat.visible = false;
         this._chat.connect('new-chat', () => this.emit('new-chat'));
-        this._chat.connect('close', () => this.closeChat());
+        this._chat.connect('close', () => this.emit('close-requested'));
         // Selecting text to copy takes the keys for a moment; they come back to the field, so typing goes on.
         this._chat.connect('settled', () => {
             if (this.typing)
@@ -564,7 +564,7 @@ export const VoiceView = GObject.registerClass({
         this._heardButton.visible = false;
         this._syncEarlier();
         this._syncCardText();
-        if (!WORKING.includes(this._phase) && !this.typing)
+        if (!WORKING.includes(this._phase) && this._phase !== 'listening' && !this.typing)
             this.emit('type-requested');
         if (St.Settings.get().enable_animations) {
             this._chat.opacity = 0;
@@ -596,7 +596,7 @@ export const VoiceView = GObject.registerClass({
         this.emit('size-changed');
     }
 
-    // Scrolling up over the pill brings the conversation; down, at its end, puts it away.
+    // Scrolling up over the pill brings the conversation. The header's close button puts it away.
     vfunc_scroll_event(event) {
         const direction = event.get_scroll_direction();
         let dy = direction === Clutter.ScrollDirection.UP ? -1 : direction === Clutter.ScrollDirection.DOWN ? 1 : 0;
@@ -604,11 +604,6 @@ export const VoiceView = GObject.registerClass({
             dy = event.get_scroll_delta()[1];
         if (dy < -0.3 && !this.chatOpen && this._history.length) {
             this.openChat();
-            return Clutter.EVENT_STOP;
-        }
-        const actor = dy > 0.3 && this.chatOpen ? eventActor(event) : null;
-        if (actor && this._row.contains(actor)) {
-            this.closeChat();
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
@@ -702,7 +697,7 @@ export const VoiceView = GObject.registerClass({
     }
 
     /** Shows the field to type a request in, starting with `initial` (a key typed while it listened); `card` is isled's. */
-    startTyping(initial = '', card = null) {
+    startTyping(initial = '', card = null, {focus = true} = {}) {
         this._dropEndedCard(card);
         this._phase = 'typing';
         this._syncClose();
@@ -719,7 +714,8 @@ export const VoiceView = GObject.registerClass({
         this._setUp.hide();
         this._showAction(null);
         this._syncSend();
-        this._entry.grab_key_focus();
+        if (focus)
+            this._entry.grab_key_focus();
         this._entry.clutter_text.set_cursor_position(-1);
         this._face.setForm('typing');
         this._syncIdeas();

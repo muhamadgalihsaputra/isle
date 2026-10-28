@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // A small copy of the assistant (see bot.js) for alerts and the closed island, with a status badge on its
-// corner. It holds still, moving only for a moment when told to (a hop, a shake), so it costs no frames.
+// corner. It holds still between blinks, glances, pointer tracking and brief gestures.
 
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
@@ -34,6 +34,7 @@ class BotIcon extends St.DrawingArea {
         this.connect('repaint', area => this._paint(area));
         this._alive = 0;
         this._glance = {x: 0.12, y: 0.06};
+        this._pointerOn = false;
         this.connect('destroy', () => {
             this._timeline?.stop();
             this.alive = false;
@@ -70,7 +71,8 @@ class BotIcon extends St.DrawingArea {
         this._alive = alive && St.Settings.get().enable_animations
             ? GLib.timeout_add(GLib.PRIORITY_DEFAULT, ALIVE_MS, () => {
                 if (this.mapped) {
-                    this._glance = {x: Math.random() * 1.2 - 0.6, y: Math.random() * 0.6 - 0.2};
+                    if (!this._pointerOn)
+                        this._glance = {x: Math.random() * 1.2 - 0.6, y: Math.random() * 0.6 - 0.2};
                     this.play(null, 420);
                 }
                 return GLib.SOURCE_CONTINUE;
@@ -101,6 +103,45 @@ class BotIcon extends St.DrawingArea {
 
     _look() {
         return this._glance;
+    }
+
+    lookAtPointer(x, y) {
+        this._pointerOn = true;
+        const [left, top] = this.get_transformed_position();
+        const size = px(this._size);
+        const glance = {
+            x: Math.max(-0.85, Math.min(0.85, (x - left - size / 2) / (size / 2))),
+            y: Math.max(-0.85, Math.min(0.85, (y - top - size / 2) / (size / 2))),
+        };
+        const changed = Math.abs(glance.x - this._glance.x) > 0.01 || Math.abs(glance.y - this._glance.y) > 0.01;
+        this._glance = glance;
+        if (changed && !this._timeline)
+            this._moveEyes();
+    }
+
+    lookAway() {
+        this._pointerOn = false;
+        const changed = Math.abs(this._glance.x) > 0.01 || Math.abs(this._glance.y) > 0.01;
+        this._glance = {x: 0, y: 0};
+        if (changed && !this._timeline)
+            this._moveEyes();
+    }
+
+    _moveEyes() {
+        this._timeline?.stop();
+        const from = this._bot.time;
+        if (!St.Settings.get().enable_animations) {
+            this._bot.step(from + 0.18, this._look());
+            this.queue_repaint();
+            return;
+        }
+        this._timeline = new Clutter.Timeline({actor: this, duration: 180});
+        this._timeline.connect('new-frame', (_timeline, ms) => {
+            this._bot.step(from + ms / 1000, this._look());
+            this.queue_repaint();
+        });
+        this._timeline.connect('completed', () => (this._timeline = null));
+        this._timeline.start();
     }
 
     // Runs its own clock on, without drawing, until the new shape and expression have taken over.
