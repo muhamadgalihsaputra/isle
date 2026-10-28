@@ -24,6 +24,7 @@ mod todo;
 mod updates;
 mod uri;
 mod usage;
+mod water;
 
 use anyhow::{Context, bail};
 use futures_util::StreamExt;
@@ -47,6 +48,7 @@ use crate::system::SystemService;
 use crate::todo::TodoService;
 use crate::updates::UpdatesService;
 use crate::usage::UsageService;
+use crate::water::WaterService;
 
 const BUS_NAME: &str = "io.github.zickrian.isle.Daemon";
 const OBJECT_PATH: &str = "/io/github/zickrian/isle/Daemon";
@@ -135,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
     server.at(OBJECT_PATH, ClipboardService::load()).await?;
     server.at(OBJECT_PATH, CalendarService::load()).await?;
     server.at(OBJECT_PATH, CaloriesService::load()).await?;
+    server.at(OBJECT_PATH, WaterService::load()).await?;
     server.at(OBJECT_PATH, PrayerService::load()).await?;
     server.at(OBJECT_PATH, RemindersService::load()).await?;
     server.at(OBJECT_PATH, SystemService::default()).await?;

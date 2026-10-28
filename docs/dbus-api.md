@@ -99,6 +99,16 @@ A local food log kept in `~/.local/share/isle/calories.json`.
 | `Remove(t id)` | | Removes an entry. |
 | `Entries` | `s` | `[{id, food, calories, at_ms}]`, oldest first. |
 
+## io.github.zickrian.isle.Water1
+
+A local water log kept in `~/.local/share/isle/water.json`.
+
+| Member | Signature | |
+|---|---|---|
+| `Drink(u amount_ml) → t id` | | Adds a drink at the current time (50–3,000 ml). |
+| `Remove(t id)` | | Removes an entry. |
+| `Entries` | `s` | `[{id, amount_ml, at_ms}]`, oldest first. |
+
 ## io.github.zickrian.isle.Prayer1
 
 Prayer schedule for the selected city, calculated by AlAdhan using Kemenag
