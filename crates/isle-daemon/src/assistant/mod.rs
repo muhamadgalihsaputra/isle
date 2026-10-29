@@ -163,8 +163,7 @@ struct State {
 #[serde(default)]
 pub struct Context {
     apps: Vec<String>,
-    /// The AI picked in Settings ("auto", "agy", "claude", "codex", "grok"), and the model picked for each
-    /// ("" for its own default).
+    /// The AI picked in Settings (including Hermes and OMP), and the model picked for each ("" for its own default).
     provider: String,
     agy_model: String,
     claude_model: String,
@@ -1686,7 +1685,7 @@ async fn start_brain(
     let provider = Provider::pick(wanted).ok_or_else(|| {
         Failure::from((
             "No AI is set up",
-            "Install Claude Code, Codex, Grok or Antigravity (agy) and sign in, then pick it in Settings.",
+            "Set up Hermes Agent or Oh My Pi (OMP), or install and sign in to another assistant, then pick it in Settings.",
         ))
     })?;
     if session.provider != Some(provider) {
@@ -2048,6 +2047,10 @@ pub fn report() -> String {
         } else {
             match provider.program() {
                 None => format!("  {name}: not installed"),
+                Some(path) if provider == Provider::OhMyPi => format!(
+                    "  {name}: {} (provider setup is managed by OMP)",
+                    path.display()
+                ),
                 Some(path) if provider.signed_in() => {
                     format!("  {name}: {} (signed in)", path.display())
                 }

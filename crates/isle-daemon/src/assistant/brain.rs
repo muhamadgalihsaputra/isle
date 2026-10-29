@@ -92,7 +92,7 @@ impl Provider {
             .find(|path| path.is_file())
     }
 
-    /// Whether the user signed in to it, as far as its sign-in file tells.
+    /// Whether the user signed in to it, as far as its own sign-in state tells.
     pub fn signed_in(self) -> bool {
         let home = dirs::home_dir().unwrap_or_default();
         match self {
@@ -105,6 +105,8 @@ impl Provider {
             Provider::Grok => super::grok::signed_in(),
             Provider::Hermes => super::openai::Client::hermes_configured(),
             Provider::OpenAi => super::openai::byok_configured(),
+            // OMP can use many provider-specific credentials in its own config. Isle checks that
+            // the CLI exists, then lets OMP report whether its chosen provider is configured.
             Provider::OhMyPi => self.program().is_some(),
         }
     }

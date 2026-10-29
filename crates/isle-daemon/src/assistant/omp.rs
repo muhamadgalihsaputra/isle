@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Oh My Pi's newline-delimited RPC runtime. OMP's native tools are disabled so Isle remains the executor.
+//! Oh My Pi's newline-delimited RPC runtime. OMP's native coding tools stay enabled; Isle executes its
+//! separate desktop actions from the assistant's answer/action format.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -49,9 +50,8 @@ impl Omp {
             });
         std::fs::create_dir_all(&session_dir)?;
         let mut command = Command::new(program);
-        // OMP keeps its native tools, extensions, skills, and rules: it is
-        // Isle's agent with full access. Only --no-ui stays, because Isle
-        // cannot answer extension dialogs over RPC; it removes no tool.
+        // Keep OMP's configured tools, extensions, skills, and rules. Run
+        // extensions headless because Isle does not host OMP's extension UI.
         command
             .args([
                 "--mode",
@@ -203,7 +203,7 @@ impl Omp {
                 }
                 "extension_ui_request" | "host_tool_call" | "host_uri_request" => {
                     bail!(
-                        "Oh My Pi requested a native tool while Isle tools are disabled; stopped for safety"
+                        "Oh My Pi requested an RPC host interaction that Isle does not support"
                     );
                 }
                 _ => {}

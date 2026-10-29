@@ -155,7 +155,7 @@ export default class IslePreferences extends ExtensionPreferences {
             title: 'Voice Assistant',
             description: 'Press the shortcut (or the ✦ in the open island) and speak. Speech is recognised on this ' +
                 'computer (set up once with isle-setup-voice in a terminal); the request goes to the AI you pick, with your ' +
-                'own sign-in and plan, Hermes local API, or a configured compatible endpoint.',
+                'own sign-in and plan, Hermes local API, OMP’s configured provider, or a compatible endpoint.',
         });
         group.add(switchRow(settings, 'voice-assistant', 'AI assistant',
             'The shortcut and the ✦ in the open island. Off: Isle never asks an AI'));
@@ -1068,12 +1068,14 @@ const AI_PROVIDERS = [
         models: () => apiModels('openai-compatible')},
     {id: 'oh-my-pi', name: 'Oh My Pi', command: 'omp', modelKey: 'voice-omp-model',
         about: 'Oh My Pi coding agent, with its own provider settings and Isle desktop actions',
-        models: () => [['', 'Oh My Pi default'], ...apiModels('oh-my-pi')]},
+        // OMP discovers a large provider catalog in its own CLI. Fetching that from Settings
+        // synchronously can block this window for seconds; use OMP's default or a manual id.
+        models: () => [['', 'Oh My Pi default']]},
     {id: 'agy', name: 'Antigravity', planName: 'Antigravity', command: 'agy', modelKey: 'voice-agy-model',
         about: 'what Antigravity answers with'},
 ];
 
-/** Model ids from the local providers configured for Hermes, OpenAI-compatible APIs and Oh My Pi. */
+/** Model ids from API-backed providers. OMP uses its configured default or an optional manual model id. */
 function apiModels(provider) {
     try {
         const proxy = Gio.DBusProxy.new_for_bus_sync(Gio.BusType.SESSION, Gio.DBusProxyFlags.NONE,
