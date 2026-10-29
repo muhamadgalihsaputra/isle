@@ -192,7 +192,9 @@ impl Event {
     /// Checked, on one line each and cut to size: the project is the folder's name unless given.
     pub fn checked(mut self) -> Result<Self, String> {
         // Grok has no hooks of its own: it runs Claude's, and the hook says so (see hook.rs `ai_of`).
-        if Ai::from_id(&self.provider).is_none() && self.provider != "grok" {
+        if Ai::from_id(&self.provider).is_none()
+            && !matches!(self.provider.as_str(), "grok" | "omp")
+        {
             return Err(format!("unknown provider `{}`", cut(&self.provider, 40)));
         }
         if !KINDS.contains(&self.kind.as_str()) {

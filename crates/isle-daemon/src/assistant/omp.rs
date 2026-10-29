@@ -50,13 +50,12 @@ impl Omp {
             });
         std::fs::create_dir_all(&session_dir)?;
         let mut command = Command::new(program);
-        // Keep OMP's configured tools, extensions, skills, and rules. Run
-        // extensions headless because Isle does not host OMP's extension UI.
+        // Keep OMP's configured tools, extensions, skills, and rules. rpc-ui
+        // lets Isle relay native-tool approval prompts through its own alerts.
         command
             .args([
                 "--mode",
-                "rpc",
-                "--no-ui",
+                "rpc-ui",
                 "--append-system-prompt",
                 instructions,
                 "--session-dir",
@@ -180,6 +179,9 @@ impl Omp {
                         activity.send(format!("Oh My Pi is using {name}…")).ok();
                     }
                 }
+                "extension_ui_request" => {
+                    self.handle_ui_request(&event).await?;
+                }
                 "prompt_result" if event["id"] == id => {
                     if event["status"] != "completed" {
                         bail!(
@@ -201,14 +203,57 @@ impl Omp {
                     }
                     return Ok(super::answer::from_text(&text));
                 }
-                "extension_ui_request" | "host_tool_call" | "host_uri_request" => {
-                    bail!(
-                        "Oh My Pi requested an RPC host interaction that Isle does not support"
-                    );
+                "host_tool_call" | "host_uri_request" => {
+                    bail!("Oh My Pi requested an RPC host interaction that Isle does not support");
                 }
                 _ => {}
             }
         }
+    }
+
+    /// Answers OMP's native-tool approval dialog through Isle's existing Claude/Codex alert flow.
+    /// Other extension dialogs are cancelled safely; passive status and notification frames need no reply.
+    async fn handle_ui_request(&mut self, event: &Value) -> anyhow::Result<()> {
+        let Some(id) = event["id"].as_str() else {
+            return Ok(());
+        };
+        let method = event["method"].as_str().unwrap_or_default();
+        let response = match method {
+            "select" | "confirm" if is_tool_approval(event) => {
+                let Some(request) = tool_approval(event, &self.session_dir) else {
+                    return self.cancel_ui_request(id).await;
+                };
+                let decision = crate::agents::hook::decide(&request)
+                    .await
+                    .unwrap_or_default();
+                let allow = matches!(decision.as_str(), "allow" | "always");
+                if method == "confirm" {
+                    json!({"type":"extension_ui_response", "id":id, "confirmed":allow})
+                } else if let Some(value) = approval_choice(&event["options"], allow) {
+                    json!({"type":"extension_ui_response", "id":id, "value":value})
+                } else {
+                    json!({"type":"extension_ui_response", "id":id, "cancelled":true})
+                }
+            }
+            // OMP extensions can ask their own questions. Isle currently supports the dangerous-tool
+            // approval flow; other dialogs are cancelled, while fire-and-forget UI updates are ignored.
+            "select" | "confirm" | "input" | "editor" | "ask" => {
+                return self.cancel_ui_request(id).await;
+            }
+            _ => return Ok(()),
+        };
+        self.stdin
+            .write_all(format!("{response}\n").as_bytes())
+            .await
+            .context("could not answer Oh My Pi's approval prompt")
+    }
+
+    async fn cancel_ui_request(&mut self, id: &str) -> anyhow::Result<()> {
+        let response = json!({"type":"extension_ui_response", "id":id, "cancelled":true});
+        self.stdin
+            .write_all(format!("{response}\n").as_bytes())
+            .await
+            .context("could not cancel an unsupported Oh My Pi dialog")
     }
 
     pub fn conversation(&self) -> Option<String> {
@@ -244,6 +289,48 @@ impl Omp {
         }
         let _ = std::fs::remove_dir_all(path);
     }
+}
+
+/// OMP labels its shell/file permission chooser `Allow tool: <name>` and puts the exact action on the next line.
+fn is_tool_approval(event: &Value) -> bool {
+    event["title"]
+        .as_str()
+        .and_then(|title| title.lines().next())
+        .is_some_and(|line| line.trim_start().starts_with("Allow tool:"))
+}
+
+fn tool_approval(event: &Value, session_dir: &Path) -> Option<crate::agents::Request> {
+    if !is_tool_approval(event) {
+        return None;
+    }
+    let title = event["title"].as_str()?;
+    let mut lines = title.lines();
+    let tool = lines.next()?.trim().strip_prefix("Allow tool:")?.trim();
+    let input = lines
+        .map(str::trim)
+        .map(|line| line.strip_prefix("Command:").unwrap_or(line).trim())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(crate::agents::Request {
+        provider: "omp".into(),
+        session: session_dir.to_string_lossy().into_owned(),
+        tool: tool.into(),
+        input,
+        ..crate::agents::Request::default()
+    })
+}
+
+fn approval_choice(options: &Value, allow: bool) -> Option<String> {
+    options.as_array()?.iter().find_map(|option| {
+        let label = option.as_str()?;
+        let matches = if allow {
+            matches!(label.to_lowercase().as_str(), "approve" | "allow")
+        } else {
+            label.eq_ignore_ascii_case("deny")
+        };
+        matches.then(|| label.to_owned())
+    })
 }
 
 /// Reads a `get_available_models` response into picker values. The wire

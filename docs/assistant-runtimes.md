@@ -27,7 +27,13 @@ instructions, and stores the conversation under Isle's private data
 directory.
 
 Current source keeps OMP's native tools, extensions, skills, and rules. Isle
-actions requested in the in-app assistant use Isle's action path. Isle-managed
+starts OMP with `--mode rpc-ui` so its native-tool approval requests can reach
+Isle. OMP's `Allow tool: ...` approval dialog is shown through Isle's existing
+agent permission alert, and Allow / Deny is sent back to OMP. If Isle cannot
+show the alert or it is dismissed, Isle denies the request. This keeps OMP's
+own approval settings in control; Isle does not auto-approve. Other interactive
+extension dialogs are cancelled. Isle actions requested in the in-app
+assistant use Isle's action path. Isle-managed
 `SOUL.md`, `USER.md`, and `MEMORY.md` for OMP are part of the target but are
 not implemented yet. OMP v18.12.5 is installed on the audited machine. A
 direct prompt to its configured default returned text, and a one-prompt RPC
@@ -41,11 +47,11 @@ through `isled` and the GNOME UI. The full
 uses OMP's configured default or an optional manual `provider/model` ID instead
 of fetching the entire catalog automatically.
 
-Isle starts OMP with `--mode rpc --no-ui`; this does not disable OMP's native
-tools. OMP's RPC documentation says calls that require interactive approval
-fail closed in this mode. Isle does not change OMP's permission settings or
-silently enable auto-approval. Approval-dialog handling in Isle's UI remains
-unimplemented.
+The approval bridge uses OMP's `rpc-ui` event protocol and the same Isle alert
+path used for Claude Code and Codex. The RPC event format was captured with a
+temporary OMP bash prompt rule and a harmless `printf` command. The code path
+is implemented, but the actual GNOME alert click-through has not yet been
+verified in a live shell session.
 
 ## External AI agents through MCP
 

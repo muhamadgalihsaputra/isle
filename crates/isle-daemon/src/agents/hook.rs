@@ -123,8 +123,8 @@ fn readable(input: &Value) -> String {
     }
 }
 
-/// Asks the island and waits; "" for no answer. Never starts isled.
-async fn decide(request: &Request) -> zbus::Result<String> {
+/// Asks the island to decide a permission requested by an agent process; never starts isled.
+pub async fn decide(request: &Request) -> zbus::Result<String> {
     let bus = zbus::conn::Builder::session()?
         .method_timeout(ANSWER)
         .build()

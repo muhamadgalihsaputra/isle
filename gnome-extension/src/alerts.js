@@ -468,8 +468,8 @@ export function meeting(event, link, join) {
     return alert;
 }
 
-const AGENT_NAMES = {claude: 'Claude', codex: 'Codex', grok: 'Grok'};
-const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex', grok: 'Grok'};
+const AGENT_NAMES = {claude: 'Claude', codex: 'Codex', grok: 'Grok', omp: 'Oh My Pi'};
+const AGENT_APPS = {claude: 'Claude Code', codex: 'Codex', grok: 'Grok', omp: 'Oh My Pi'};
 /** The agent's icon and accent colour; Claude's for anything unknown. */
 const agentIcon = provider => provider === 'codex' ? 'isle-openai' : provider === 'grok' ? 'isle-grok' : 'isle-claude';
 const agentTone = provider => provider === 'codex' ? 'codex' : provider === 'grok' ? 'grok' : 'claude';

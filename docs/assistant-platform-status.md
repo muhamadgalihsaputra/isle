@@ -31,10 +31,17 @@ its user-facing flow is complete.
 - Isle's current doctor check only confirms that the OMP executable exists;
   OMP owns credentials for its many provider options. The source now reports
   that OMP manages provider setup instead of claiming the binary is signed in.
-- Isle starts OMP with `--mode rpc --no-ui`, which leaves native tools enabled.
-  OMP documents that a tool call needing interactive approval fails closed in
-  this mode. Isle does not override OMP's permission mode or surface those
-  approval dialogs in its UI yet.
+- Isle starts OMP with `--mode rpc-ui`, which keeps native tools enabled and
+  relays OMP's native-tool approval prompts through Isle's existing Allow /
+  Deny alert used for Claude Code and Codex. Isle returns the chosen response
+  to OMP. An unavailable or dismissed alert denies the request. Isle does not
+  override OMP's permission mode; unrelated interactive extension dialogs are
+  cancelled.
+- A temporary OMP bash `prompt` rule and harmless `printf` command produced an
+  `extension_ui_request` (`select`, title `Allow tool: bash`, options `Approve`
+  and `Deny`). The corresponding response uses `extension_ui_response` with
+  the selected option. This confirms the RPC bridge format. It does not verify
+  the alert click-through in a live GNOME Shell session.
 - The in-app assistant has an Isle answer/action loop that executes Isle
   actions. The assistant does not use the external MCP server as its internal
   tool interface.
@@ -68,8 +75,8 @@ its user-facing flow is complete.
   Antigravity, Codex, or the relevant agent harness, not in Isle's assistant
   provider settings.
 - **OMP acceptance:** verify an in-app model response, Isle action execution,
-  continuation, cancellation, and failures. Decide how to surface native OMP
-  tool approvals without enabling auto-approval.
+  continuation, cancellation, failures, and an actual Allow / Deny click for
+  a native OMP tool approval in GNOME Shell.
 - **Hermes acceptance:** verify multi-step in-app requests, Isle action
   execution, continuation, cancellation, and errors against the local API.
 - **OMP context:** add Isle-managed `SOUL.md`, `USER.md`, and `MEMORY.md` for
