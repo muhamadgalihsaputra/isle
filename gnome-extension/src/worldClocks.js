@@ -34,6 +34,50 @@ export function readCities(settings) {
     return cities.sort((a, b) => offset(a) - offset(b));
 }
 
+/** The chosen weather city, or the configured GNOME World Clock nearest the local time zone. */
+export function weatherLocation(settings, clocks = shellSettings()) {
+    const world = GWeather.Location.get_world();
+    const saved = settings.get_value('weather-location').deepUnpack()[0];
+    if (saved) {
+        try {
+            return world?.deserialize(saved) ?? null;
+        } catch {
+            // A location may have disappeared from libgweather's database since it was selected.
+        }
+    }
+    const cities = readCities(clocks);
+    if (!cities.length)
+        return null;
+
+    const now = GLib.DateTime.new_now_utc().to_unix();
+    const offset = timezone => timezone.get_offset(timezone.find_interval(GLib.TimeType.UNIVERSAL, now));
+    const localOffset = GLib.DateTime.new_now_local().get_utc_offset() / 1_000_000;
+    return cities.reduce((nearest, city) =>
+        Math.abs(offset(city.timezone) - localOffset) < Math.abs(offset(nearest.timezone) - localOffset)
+            ? city : nearest).location;
+}
+
+/** Whether the user picked a weather city instead of following the local World Clock. */
+export function hasWeatherLocation(settings) {
+    return settings.get_value('weather-location').n_children() > 0;
+}
+
+/** Chooses an explicit weather city, or clears it to follow GNOME World Clocks again. */
+export function setWeatherLocation(settings, location) {
+    if (location)
+        settings.set_value('weather-location', new GLib.Variant('av', [location.serialize()]));
+    else
+        settings.reset('weather-location');
+}
+
+/** A city's display name and country, or empty if GNOME has no local clock city. */
+export function weatherLocationName(settings) {
+    const location = weatherLocation(settings);
+    if (!location)
+        return '';
+    return [location.get_city_name() || location.get_name(), location.get_country_name()].filter(Boolean).join(', ');
+}
+
 /** Every city GNOME knows, `{location, name, place, search}`, by name; `place` is "State, Country". */
 export function allCities() {
     const cities = [];

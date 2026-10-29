@@ -433,6 +433,7 @@ export default class IslePreferences extends ExtensionPreferences {
         page.add(look);
         page.add(pagesGroup(settings, window));
         page.add(worldClocksGroup(settings, window));
+        page.add(weatherGroup(settings, window));
 
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         // On: in the island; off: left to GNOME's own banners (`gnome-banners`).
@@ -974,15 +975,56 @@ function worldClocksGroup(settings, window) {
     return group;
 }
 
+/** Current weather in the compact island, using a picked city or the nearest GNOME World Clock. */
+function weatherGroup(settings, window) {
+    const group = new Adw.PreferencesGroup({
+        title: 'Weather',
+        description: 'Current temperature in the compact island. Refreshes every 30 minutes while it is on screen.',
+    });
+    group.add(switchRow(settings, 'weather-enabled', 'Show current weather', 'An icon and temperature in the notch'));
+
+    const city = new Adw.ActionRow({title: 'Weather location', activatable: true});
+    city.add_prefix(new Gtk.Image({icon_name: 'weather-clear-symbolic'}));
+    const reset = new Gtk.Button({icon_name: 'edit-clear-symbolic', valign: Gtk.Align.CENTER,
+        css_classes: ['flat'], tooltip_text: 'Follow GNOME World Clocks again'});
+    city.add_suffix(reset);
+    city.connect('activated', () => chooseCity(group.get_root(),
+        location => WorldClocks.setWeatherLocation(settings, location), 'Choose a City'));
+    reset.connect('clicked', () => WorldClocks.setWeatherLocation(settings, null));
+    settings.bind('weather-enabled', city, 'sensitive', Gio.SettingsBindFlags.GET);
+
+    const shell = WorldClocks.shellSettings();
+    const refresh = () => {
+        const custom = WorldClocks.hasWeatherLocation(settings);
+        const name = WorldClocks.weatherLocationName(settings);
+        city.subtitle = custom
+            ? `${name || 'Chosen city'} · set for weather`
+            : name ? `${name} · follows the nearest GNOME World Clock to your time zone`
+                : 'Choose a city or add one to GNOME World Clocks';
+        reset.visible = custom;
+    };
+    const locationChanged = settings.connect('changed::weather-location', refresh);
+    const clocksChanged = shell?.connect('changed::locations', refresh) ?? 0;
+    window.connect('close-request', () => {
+        settings.disconnect(locationChanged);
+        if (clocksChanged)
+            shell.disconnect(clocksChanged);
+        return false;
+    });
+    refresh();
+    group.add(city);
+    return group;
+}
+
 /** Whether GNOME's clock is set to 12 hours. */
 function useTwelveHour() {
     return new Gio.Settings({schema_id: 'org.gnome.desktop.interface'}).get_string('clock-format') === '12h';
 }
 
 /** A dialog to search GNOME's list of cities; `onPick` gets the one chosen. */
-function chooseCity(window, onPick) {
+function chooseCity(window, onPick, title = 'Add a City') {
     const cities = WorldClocks.allCities();
-    const dialog = new Adw.Dialog({title: 'Add a City', content_width: 420, content_height: 480});
+    const dialog = new Adw.Dialog({title, content_width: 420, content_height: 480});
     const view = new Adw.ToolbarView();
     view.add_top_bar(new Adw.HeaderBar());
     const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 12, margin_start: 12, margin_end: 12, margin_bottom: 12});

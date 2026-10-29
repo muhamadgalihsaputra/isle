@@ -15,6 +15,7 @@ import {onUiScale, px} from './compat.js';
 import * as Format from './format.js';
 import * as Palette from './palette.js';
 import * as Playback from './playback.js';
+import {WeatherWatcher} from './weather.js';
 import {watchClock} from './wallClock.js';
 import {Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt, label} from './widgets.js';
 
@@ -23,8 +24,8 @@ const ASSISTANT_SIZE = 26;
 
 /** Sizes hanging below the top bar, and inside it with smaller text, in CSS pixels. */
 const SIZES = {
-    hanging: {side: 72, center: 34, padding: 32, gap: 16, ring: 20, bars: 16, moon: 14, call: 15},
-    inBar: {side: 72, center: 30, padding: 28, gap: 16, ring: 18, bars: 14, moon: 13, call: 14},
+    hanging: {side: 72, center: 34, padding: 32, gap: 16, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+    inBar: {side: 72, center: 30, padding: 28, gap: 16, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -98,6 +99,13 @@ export const CompactView = GObject.registerClass({
         this._notificationStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
         this._notificationStatus.add_child(this._notificationIcon);
         this._notificationStatus.add_child(this._notificationCount);
+        this._weatherIcon = new St.Icon({icon_name: 'weather-clear-symbolic', icon_size: 16,
+            y_align: Clutter.ActorAlign.CENTER});
+        this._weatherTemperature = label('', 'isle-compact-status-time');
+        this._weatherStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER,
+            visible: false});
+        this._weatherStatus.add_child(this._weatherIcon);
+        this._weatherStatus.add_child(this._weatherTemperature);
         this._left.add_child(this._timerStatus);
 
         this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
@@ -131,9 +139,16 @@ export const CompactView = GObject.registerClass({
         this._right.add_child(this._rightSpacer);
         this._leftStatusItems = [this._timerStatus];
         this._rightStatusItems = [this._serviceDown, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._musicStatus, this._restDate, this._privacyDots];
+            this._notificationStatus, this._musicStatus, this._weatherStatus, this._restDate, this._privacyDots];
         for (const item of this._rightStatusItems)
             this._right.add_child(item);
+
+        this._weather = new WeatherWatcher(settings);
+        this._weatherChanged = this._weather.connect('changed', () => {
+            this._syncWeather();
+            this._refresh();
+        });
+        this._syncWeather();
 
         row.add_child(this._left);
         row.add_child(this._assistantButton);
@@ -148,6 +163,7 @@ export const CompactView = GObject.registerClass({
         this._privacyChanged = privacy.connect('changed', () => this._refresh());
         this._callChanged = call.connect('changed', () => this._refresh());
         this.connect('notify::mapped', () => {
+            this._weather.active = this.mapped;
             this._assistant.alive = this.mapped && !this._idle;
             if (this.mapped && !this._idle)
                 this._startAssistantPointerTracking();
@@ -163,6 +179,7 @@ export const CompactView = GObject.registerClass({
         });
         this._tickClock();
         this._stopClock = watchClock(() => this._tickClock());
+        this._weather.active = this.mapped;
         this._refresh();
         // Another scale: the sides are measured again.
         onUiScale(this, () => this._refresh(), {now: false});
@@ -190,6 +207,15 @@ export const CompactView = GObject.registerClass({
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */
     _showingPrivacy() {
         return this._settings.get_boolean('privacy-indicators') && this._privacy.any;
+    }
+
+    /** Updates the weather chip and its screen-reader name from the last successful reading. */
+    _syncWeather() {
+        const {temperature, iconName, summary, locationName} = this._weather.state;
+        this._weatherIcon.icon_name = iconName || 'weather-clear-symbolic';
+        this._weatherTemperature.text = temperature;
+        this._weatherStatus.visible = Boolean(temperature);
+        this._weatherStatus.accessible_name = [locationName, summary, temperature].filter(Boolean).join(', ');
     }
 
     /** Shows the unread count on the right beside the other live statuses. */
@@ -270,6 +296,7 @@ export const CompactView = GObject.registerClass({
         this._bars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
         this._callIcon.icon_size = this._micOff.icon_size = size.call;
+        this._weatherIcon.icon_size = size.weather;
         this._assistantButton.set_size(px(size.center), px(size.center));
         if (inBar)
             this.add_style_class_name('isle-compact-in-bar');
@@ -314,6 +341,7 @@ export const CompactView = GObject.registerClass({
             onCall && this._callStatus,
             this._unseen > 0 && this._notificationStatus,
             hasTrack && this._musicStatus,
+            this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
         for (const item of this._leftStatusItems)
             item.visible = leftStatuses.includes(item);
@@ -506,5 +534,7 @@ export const CompactView = GObject.registerClass({
             this._settings.disconnect(id);
         this._privacy.disconnect(this._privacyChanged);
         this._call.disconnect(this._callChanged);
+        this._weather.disconnect(this._weatherChanged);
+        this._weather.destroy();
     }
 });

@@ -114,6 +114,16 @@
       <summary>World clocks on the Calendar page</summary>
       <description>A globe on the Calendar page shows the time in the cities of GNOME’s World Clocks.</description>
     </key>
+    <key name="weather-enabled" type="b">
+      <default>true</default>
+      <summary>Show current weather in the compact island</summary>
+      <description>Shows the current temperature while the compact island is on screen.</description>
+    </key>
+    <key name="weather-location" type="av">
+      <default>[]</default>
+      <summary>City used for current weather</summary>
+      <description>An empty list follows the GNOME World Clock nearest the local time zone.</description>
+    </key>
     <key name="hidden-pages" type="as">
       <default>[]</default>
       <summary>Pages left out of the island</summary>
