@@ -1,26 +1,66 @@
-# Assistant runtimes
+# Assistant Runtimes: Current Setup and Gaps
 
-The Isle assistant can use Claude Code, Codex, Antigravity, Hermes Agent, or an OpenAI-compatible chat endpoint. Isle owns the desktop action loop: every runtime returns Isle's action format, and Isle runs or asks for approval for those actions.
+The source includes Hermes Agent, Oh My Pi, OpenAI-compatible BYOK, and the
+existing coding-agent CLIs. Isle currently receives an Isle answer/action
+format and runs its own action loop. This is not yet the shared MCP
+tool-calling architecture in [assistant-platform-plan.md](assistant-platform-plan.md).
+See [assistant-platform-status.md](assistant-platform-status.md) for audited
+implementation status.
 
 ## Hermes Agent
 
-Use [Hermes' local API server](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server). In `~/.hermes/.env`, set `API_SERVER_ENABLED=true` and a strong `API_SERVER_KEY`, then run `hermes gateway`. Keep the API server bound to its default loopback address. Isle reads the key from that file and connects to `http://127.0.0.1:8642/v1`.
+The current adapter uses Hermes' local API server. In ~/.hermes/.env, set
+API_SERVER_ENABLED=true and a strong API_SERVER_KEY, then run hermes gateway.
+Keep the API server bound to its default loopback address. Isle reads the key
+from that file and connects to http://127.0.0.1:8642/v1.
 
-Hermes connects to Isle with full access: its own tools stay enabled, and Isle adds its desktop instructions and context to Hermes' own prompt. Hermes answers as Isle's agent, and Isle runs the desktop actions it asks for.
-
-Hermes uses its configured default model when Isle's model field is empty. Isle's extra coding-agent personality text is not applied to Hermes; Isle's system instructions are added to Hermes' own prompt.
+Hermes keeps its own personality, memory, and native runtime behavior. Isle
+adds its desktop instructions and executes Isle actions through Isle's action
+loop. Live multi-step tool use and cancellation still need validation against
+the installed Hermes version.
 
 ## OpenAI-compatible API (BYOK)
 
-Create `~/.config/isle/ai.env`, readable only by your user (`chmod 600`):
+The current backend reads these values from ~/.config/isle/ai.env or the
+service environment:
 
-```ini
-ISLE_OPENAI_BASE_URL=https://api.example.com/v1
-ISLE_OPENAI_API_KEY=your-key
-```
+    ISLE_OPENAI_BASE_URL=https://api.example.com/v1
+    ISLE_OPENAI_API_KEY=your-key
 
-The endpoint must implement chat completions and return JSON content. Isle looks for models at `/models`, then `/v1/models`, and displays returned IDs in Assistant settings. You can also enter a model ID directly. The key is not stored in GNOME settings or included in diagnostic output.
+If using the file, create it with user-only permissions:
+
+    chmod 600 ~/.config/isle/ai.env
+
+The backend has model discovery for /models and /v1/models and a streaming chat
+client. Assistant Settings currently has a model ID field and model picker,
+but no base-URL or API-key controls; configuring the endpoint still requires
+editing ai.env manually. The chat client currently asks the model for Isle's
+JSON answer/action format. It does not yet send MCP tool definitions and
+execute MCP tool calls.
+
+Do not put the API key in GSettings or diagnostic output. The end-to-end
+configure, fetch, select, and chat flow has not been verified against a live
+compatible endpoint.
 
 ## Oh My Pi
 
-Install and configure `omp` with the provider/model you want. Select **Oh My Pi** in Assistant settings; the model is optional, and an empty field uses OMP's configured default. The picker also lists OMP's full model catalog (RPC `get_available_models`, shown as `provider/id`); listing waits for OMP's background model discovery, so a first open can come back empty and fill in on retry. On OMP installs with a large catalog the listing can fail outright — OMP v18.12.6 refuses it ("RPC response exceeded the transport limit") and its RPC protocol has no chunked alternative — in which case the picker keeps the default plus the free-text entry. Isle starts `omp --mode rpc` with OMP's native tools enabled, appends Isle's action instructions, and stores the conversation under Isle's private data directory. Desktop actions still pass through Isle, including its command approval card. Closing or cancelling a run stops the OMP process; the session can be resumed on the next request. The OMP RPC interface is documented in the [Oh My Pi RPC reference](https://github.com/can1357/oh-my-pi/blob/main/docs/rpc.md).
+Install and configure omp with the provider/model you want. Select Oh My Pi in
+Assistant Settings; the model is optional, and an empty field uses OMP's
+configured default. Isle starts omp in RPC mode, appends Isle instructions,
+and stores the conversation under Isle's private data directory.
+
+Current source keeps OMP's native tools, extensions, skills, and rules. This
+does not yet route Isle-owned capabilities through a shared Isle MCP registry.
+The OMP catalog lookup is implemented, but previous live notes report that
+OMP v18.12.6 can reject the full catalog because of its RPC response limit.
+Verify this against the installed OMP version before relying on model
+discovery.
+
+## Target
+
+The intended design is documented in
+[assistant-platform-plan.md](assistant-platform-plan.md): an Isle-owned MCP
+tool surface for Isle capabilities; BYOK endpoint and key configuration in
+Assistant Settings; model fetching; and Isle-managed SOUL.md, USER.md, and
+MEMORY.md for supported non-Hermes coding agents. Hermes retains its own
+personality and memory.

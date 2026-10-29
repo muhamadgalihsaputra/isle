@@ -41,10 +41,12 @@ the provider and keeps it up for the next turns until dropped.
   the answer forming. Antigravity is the exception: it reports activity
   only and sends no draft.
 - The answer is always Isle's action JSON (see `answer.rs`): every
-  provider returns it, and Isle runs or asks approval for the actions.
-  No provider executes a desktop action itself. Hermes connects with
-  full access: it keeps its own tools, answers as Isle's agent, and
-  Isle runs the desktop actions it asks for.
+  provider returns it, and Isle runs or asks approval for those Isle actions.
+  This describes the current answer/action path; Hermes and OMP can also keep
+  their own native tools. Those native tools are not the shared Isle MCP tool
+  interface in the target design. Hermes connects with full access: it keeps
+  its own tools, answers as Isle's agent, and Isle runs the desktop actions it
+  asks for.
 
 ### stream
 
@@ -95,12 +97,23 @@ legitimately long answers.
 
 ## What is not the boundary
 
-- The MCP server is not a provider: it exposes Isle's tools to other
-  agents and never answers as the assistant.
+- The external MCP server is not a provider: today it exposes a selected set
+  of Isle tools to external agents and does not answer as the assistant. It is
+  not yet the internal tool path for Hermes, OMP, or BYOK.
 - Model discovery is not part of a turn: `ListModels` (Hermes and
   OpenAI-compatible endpoints via `/models`, Oh My Pi via RPC
   `get_available_models`) feeds the settings picker only.
-- Personality settings are per-backend configuration, not turns:
-  custom instructions apply to coding-agent backends; Hermes keeps its
-  own personality and memory files, and Isle only adds its desktop
+- Current personality settings are one `voice-custom-instructions` value,
+  added to supported non-Hermes prompts. The target's Isle-managed
+  `SOUL.md`, `USER.md`, and `MEMORY.md` files do not exist yet. Hermes keeps
+  its own personality and memory files, and Isle only adds its desktop
   instructions.
+
+## Target tool boundary
+
+The current BYOK API sends Isle's JSON answer/action schema and then uses
+Isle's existing action runner. OMP currently keeps its native tools. Neither
+path is yet the target shared MCP tool-call interface. The target is one
+Isle-owned registry and executor used by the assistant inside Isle and the
+external MCP service, with the same tool schemas, permissions, approvals, and
+results. See [assistant-platform-plan.md](assistant-platform-plan.md).

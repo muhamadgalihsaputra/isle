@@ -1,6 +1,29 @@
 # Isle MCP server
 
-Isle can expose selected local tools to MCP clients over Streamable HTTP.
+Isle can expose selected local tools to MCP clients over Streamable HTTP. This
+page documents the external service that is currently implemented.
+
+## Current implementation boundary
+
+This is the optional **external** MCP service. It is not currently the tool
+interface used by the assistant running inside Isle. The in-Isle assistant
+uses its existing answer/action loop; OpenAI-compatible replies do not yet
+make MCP tool calls.
+
+The current service exposes tasks, Isle calendar events, reminders, calorie
+entries, prayer schedule/location, current media controls, focus timer state
+and controls, and HTTP(S) URL opening. It does not yet cover every Isle page
+or action. For example, the Water D-Bus service has no MCP tool, and clipboard
+or shelf contents, notifications, calls, and other desktop actions are not in
+this service's tool list.
+
+The target is one Isle-owned tool registry and executor shared by the internal
+assistant and external MCP clients, covering every Isle feature that can be
+exposed safely with the same permissions and approval rules. Any exclusions
+need a documented reason. The target and its incomplete work are tracked in
+[assistant-platform-plan.md](assistant-platform-plan.md)
+and [assistant-platform-tasks.md](assistant-platform-tasks.md).
+
 Install the optional Python runtime first:
 
 ```sh
@@ -62,7 +85,7 @@ prayer times, focus timer state, and current media. Write tools are disabled unl
 permits play/pause, next, and previous. `open_url` opens an HTTP(S) URL through the desktop portal and needs
 the `desktop:write` scope and the matching write allowlist entry.
 
-Prayer city and country are set in Isle Settings → Daily Life; the local
+Prayer city and country are set in Isle Settings → Island → Daily Life; the local
 calorie log is stored at `~/.local/share/isle/calories.json`. Food logging is
 manual and does not estimate calories from meal names.
 
