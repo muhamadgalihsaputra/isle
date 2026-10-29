@@ -57,8 +57,14 @@ Acceptance: edits affect the next OMP session and persist across restarts.
 
 ### 3. Complete the Hermes flow inside Isle
 
-- [ ] Verify Hermes API connection, model selection, multi-step Isle actions,
-  continuation, cancellation, and failure recovery.
+- [x] Document Hermes API setup, loopback/key requirements, model selection,
+  history storage, and the boundary between Hermes tools and Isle actions.
+- [ ] Verify the local Hermes API connection, `/v1/models` discovery, selected
+  model, and Hermes default against the installed version.
+- [ ] Verify streaming multi-turn requests, Isle action approval/results,
+  history persistence, cancellation, gateway restart, and error handling.
+- [ ] Decide and implement how Hermes-native tool approvals and progress should
+  appear in Isle; the current adapter does not relay them.
 - [ ] Keep Hermes' personality and durable memory under Hermes' control.
 
 Acceptance: Hermes completes multi-step requests in the Isle UI and routes

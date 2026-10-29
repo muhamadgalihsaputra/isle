@@ -29,7 +29,8 @@ the provider and keeps it up for the next turns until dropped.
   alert; other interactive extension dialogs are cancelled.
 - Hermes and OpenAI-compatible endpoints build an API client instead of
   a process, and load their per-provider conversation history from the
-  private data directory.
+  private data directory. Hermes uses its local API server; the gateway is
+  started and permissioned by Hermes, outside Isle's child-process control.
 
 ### warm
 
@@ -54,6 +55,9 @@ the provider and keeps it up for the next turns until dropped.
   their own native tools. The external MCP server is a separate interface for
   outside agents. Hermes connects with full access: it keeps its own tools,
   answers as Isle's agent, and Isle runs the desktop actions it asks for.
+  Native Hermes tool calls and their approvals stay inside the Hermes API
+  server; the current adapter does not surface those approval requests in the
+  Isle alert UI.
 
 ### stream
 
@@ -62,7 +66,8 @@ Streaming is how `draft` is fed, not a separate mode:
 - Claude, Codex, and Antigravity stream their CLIs' JSON event lines.
 - Oh My Pi streams RPC `message_update` text deltas.
 - Hermes and OpenAI-compatible endpoints stream server-sent events:
-  each `choices[0].delta.content` is appended and forwarded.
+  each `choices[0].delta.content` is appended and forwarded. The Hermes
+  adapter currently ignores Hermes-specific tool-progress events.
 - Oh My Pi and the API arms send an empty draft when done; Claude and
   Codex simply stop at the final text. The island treats both as "the
   draft is finished" once the answer item lands.

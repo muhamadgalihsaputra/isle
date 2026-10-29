@@ -8,15 +8,78 @@ and [implementation audit](assistant-platform-status.md).
 
 ## Hermes Agent inside Isle
 
-The current adapter uses Hermes' local API server. In `~/.hermes/.env`, set
-`API_SERVER_ENABLED=true` and a strong `API_SERVER_KEY`, then run
-`hermes gateway`. Keep the API server bound to its default loopback address.
-Isle reads the key from that file and connects to `http://127.0.0.1:8642/v1`.
+Isle connects to Hermes' local API server; it does not start the `hermes`
+program itself. Hermes must be installed, configured with a provider/model,
+and running its gateway before Isle can send it a request.
 
-Hermes keeps its own personality, memory, and native runtime behavior. Isle
-adds its desktop instructions and executes Isle actions through Isle's action
-loop. Live multi-step tool use and cancellation still need validation against
-the installed Hermes version.
+### Set up the Hermes API
+
+1. Install Hermes Agent and finish its provider setup using the
+   [Hermes installation guide](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/getting-started/installation.md).
+2. Add these values to `~/.hermes/.env`:
+
+   ```dotenv
+   API_SERVER_ENABLED=true
+   API_SERVER_KEY=<paste-a-long-random-secret-here>
+   ```
+
+   Generate the key with `openssl rand -hex 32`; paste its output as the value
+   of `API_SERVER_KEY`. Keep the file private by setting its mode to `0600`
+   (`chmod 600 ~/.hermes/.env`). Keep Hermes on its default API address,
+   `127.0.0.1:8642`. The API server exposes Hermes' full toolset, including
+   terminal commands, and requires the key even on loopback. Do not bind it to
+   `0.0.0.0` for Isle. See Hermes' [API server guide](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/api-server.md)
+   for its security and configuration details.
+3. Start the gateway. To run it in the foreground:
+
+   ```sh
+   hermes gateway
+   ```
+
+   Its startup output should report the API server listening at
+   `http://127.0.0.1:8642`. For a persistent user service, install it once
+   with `hermes gateway install`, then use `hermes gateway start` and check
+   it with `hermes gateway status` (see the Hermes
+   [gateway command reference](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md)).
+   Isle does not start or supervise Hermes.
+4. Open **Isle Settings → Assistant**, enable the assistant, and choose
+   **Hermes Agent**. The Model row offers **Hermes default** and IDs returned
+   by Hermes' `/v1/models` endpoint. Choose an explicit listed ID if the
+   default does not work with your Hermes version.
+
+Isle reads `API_SERVER_KEY` from `~/.hermes/.env` (or `HERMES_API_KEY` from
+the `isled` environment) and connects to
+`http://127.0.0.1:8642/v1`. The optional `ISLE_HERMES_URL` environment
+variable changes that URL for a gateway using a different local port; it is
+not an Assistant Settings field. Isle has no separate Hermes key or endpoint
+form because Hermes owns provider setup and credentials.
+
+`isled --doctor` reports Hermes as configured when it finds the API key. That
+check does not verify that the gateway is currently reachable. If Isle reports
+an API connection error, check that `hermes gateway` is still running, that it
+uses port 8642, and that the key in `~/.hermes/.env` matches the running
+gateway.
+
+### What Isle and Hermes each handle
+
+Isle sends a streaming OpenAI-compatible Chat Completions request to Hermes,
+with Isle's assistant instructions and the selected model. The response text
+is parsed as Isle's answer format. Desktop actions in that answer use Isle's
+own action and approval flow. Isle stores up to 60 recent conversation
+messages in `~/.local/share/isle/assistant-history-hermes.json`, with
+user-only file permissions, so the conversation can continue after a restart.
+This uses Isle's default data directory; an XDG data-directory override moves
+the file with it.
+
+Hermes keeps its own identity, personality, memory, skills, and native tools.
+Native Hermes tool calls run in the Hermes API server under Hermes' own tool
+and approval settings. The current Isle adapter does not process API-side
+native-tool approval requests or turn them into Isle Allow / Deny alerts;
+configure and verify those permissions in Hermes. Isle's desktop-action
+approval does not cover them. Isle also currently consumes text deltas only,
+so Hermes tool-progress events are not shown as activity in Isle. Multi-step
+tool use, default-model handling, and cancellation still need live acceptance
+against the installed Hermes version.
 
 ## Oh My Pi inside Isle
 

@@ -13,7 +13,9 @@ context, the actions it executes, and the permissions for those actions.
 
 - **Hermes Agent:** connect to Hermes through its local API. Keep Hermes'
   identity, personality, memory, and native runtime behavior. Isle handles
-  Isle-owned desktop actions through its own action and approval path.
+  Isle-owned desktop actions through its own action and approval path. Hermes'
+  native tools execute inside its gateway and use Hermes' permissions; their
+  approval requests are not currently bridged into Isle's alert UI.
 - **Oh My Pi:** connect through OMP's RPC interface. Keep OMP's native coding
   tools and runtime behavior. OMP can use Isle's in-app action path for
   Isle-owned actions; those actions still go through Isle's permissions.
@@ -84,6 +86,8 @@ this target.
 
 - Keep Hermes and OMP secrets out of logs and diagnostics; preserve their
   runtime-specific secure configuration.
+- Keep the Hermes API server bound to loopback and require its API key: the
+  endpoint grants access to Hermes' full native toolset.
 - Keep sensitive D-Bus caller checks in place.
 - Default the MCP server to loopback. Require authentication for non-loopback
   binds and use per-client scopes and write allowlists.

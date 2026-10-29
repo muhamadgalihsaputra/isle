@@ -11,9 +11,25 @@ its user-facing flow is complete.
   (OMP), OpenAI-compatible BYOK, and other coding-agent CLIs. The target for
   the Isle assistant is Hermes and OMP; BYOK and the other provider adapters
   are existing source, not required work for this target.
-- Hermes uses a loopback OpenAI-compatible client and reads its API-server
-  key from Hermes' configuration. Hermes owns its identity, personality, and
-  durable memory. Isle also keeps an API conversation transcript.
+- Hermes uses Isle's OpenAI-compatible streaming client against Hermes'
+  local API server at `http://127.0.0.1:8642/v1`. The key comes from
+  `~/.hermes/.env` (`API_SERVER_KEY`) or `HERMES_API_KEY`; `ISLE_HERMES_URL`
+  can override the endpoint. Settings offers Hermes default and IDs read from
+  `/v1/models`. Hermes owns provider setup, identity, personality, durable
+  memory, and native tools. Isle stores up to 60 recent messages in its
+  private `assistant-history-hermes.json` file.
+- Hermes setup steps are documented in
+  [assistant-runtimes.md](assistant-runtimes.md). Isle's doctor check only
+  confirms that it found a key; it does not ping the gateway. Hermes' API
+  server grants access to its full toolset, so the documented setup keeps it
+  on the default loopback address and uses a key.
+- The source streams only `choices[0].delta.content` and parses the final text
+  as Isle's answer/action format. Isle actions in that answer use Isle's own
+  permission path. Hermes-native tool execution runs in the Hermes gateway;
+  the adapter does not display API-side native-tool approval prompts or
+  tool-progress events in Isle. No live Hermes API round trip, multi-step
+  native-tool flow, Isle action, cancellation, or approval acceptance was
+  performed during this audit.
 - OMP has an RPC adapter, streaming/progress handling, session persistence,
   and model-catalog lookup code. Current source keeps OMP's native tools,
   extensions, skills, and rules.
