@@ -1,24 +1,65 @@
 # Isle Assistant and MCP Work
 
 This tracks the target in [assistant-platform-plan.md](assistant-platform-plan.md).
-The in-app assistant (Hermes and OMP) and the external MCP server are separate
-surfaces. Source implementation and live acceptance are reported in
+The in-app assistant and external MCP server are separate surfaces. OMP is the
+first implementation priority, followed by Hermes and then MCP coverage.
+Source implementation and live acceptance are tracked in
 [assistant-platform-status.md](assistant-platform-status.md).
 
 ## Existing source, not full acceptance
 
-- Isle has in-app provider code for Hermes and OMP. Other provider adapters
-  and OpenAI-compatible code exist in source but are outside this target.
-- Isle's assistant has an answer/action loop for actions executed by Isle.
-  It does not need to call the external MCP server.
+- The OMP RPC adapter and Isle answer/action loop exist. A prompt to OMP's
+  configured default and a one-prompt RPC round trip both returned
+  successfully. The in-app response, Isle action, and native-tool flow still
+  need verification.
+- Assistant Settings used to synchronously request OMP's full model catalog.
+  That call took about 27 seconds in the local CLI and exceeded Settings'
+  eight-second timeout. Settings now offers OMP's configured default and an
+  optional manual model ID instead.
 - The optional external MCP service currently exposes a selected subset of
-  Isle features. Its current tools do not cover all Isle data and actions.
+  Isle features. It does not cover all Isle data and actions.
 - Assistant Settings has one Custom instructions field. It does not manage
   Isle-owned `SOUL.md`, `USER.md`, and `MEMORY.md` files for OMP.
 
 ## Ordered work
 
-### 1. Inventory all Isle data and actions for MCP
+### 1. Make OMP usable inside Isle
+
+- [x] Avoid fetching OMP's full model catalog synchronously from Settings.
+- [x] Verify the configured default responds through OMP's RPC protocol.
+- [ ] Verify the in-app OMP process starts, accepts a prompt, streams a reply,
+  and returns Isle actions through the existing answer/action loop.
+- [ ] Verify OMP's configured default model and manually entered `provider/id`
+  both work.
+- [ ] Check native OMP tools that need interactive approval. Isle currently
+  starts OMP headless; preserve OMP's permission behavior and do not silently
+  auto-approve those tools.
+- [ ] Verify session continuation, cancellation, failures, and warm startup.
+
+Acceptance: OMP answers and performs an Isle action in the Isle UI, reports
+tool or model failures clearly, and does not make Settings wait for model
+catalog discovery.
+
+### 2. Add Isle-managed context files for OMP
+
+- [ ] Define the Isle-owned locations and size limits for `SOUL.md`,
+  `USER.md`, and `MEMORY.md`.
+- [ ] Add Assistant Settings editors for the three files.
+- [ ] Load the files into OMP sessions.
+- [ ] Define safe memory updates before allowing OMP to write `MEMORY.md`.
+
+Acceptance: edits affect the next OMP session and persist across restarts.
+
+### 3. Complete the Hermes flow inside Isle
+
+- [ ] Verify Hermes API connection, model selection, multi-step Isle actions,
+  continuation, cancellation, and failure recovery.
+- [ ] Keep Hermes' personality and durable memory under Hermes' control.
+
+Acceptance: Hermes completes multi-step requests in the Isle UI and routes
+Isle-owned actions through Isle's permission path.
+
+### 4. Inventory all Isle data and actions for external MCP
 
 - [ ] List every Isle page, data source, and user action.
 - [ ] Define MCP tools for each read and action, with typed inputs and
@@ -35,7 +76,7 @@ example, calories for a requested date) and perform the inventoried actions.
 Every Isle capability has a tool or a specific documented technical/security
 reason why it cannot be exposed.
 
-### 2. Complete the external MCP server
+### 5. Complete the external MCP server
 
 - [ ] Implement the inventory as the MCP server's tool surface.
 - [ ] Route calls through Isle services and action checks; do not expose
@@ -53,40 +94,14 @@ Acceptance: external MCP clients can discover and use every inventoried Isle
 tool, with results and permissions verified. The MCP server is not used as an
 internal tool protocol by the Isle assistant.
 
-### 3. Complete the in-app Hermes and OMP flows
+### 6. Complete live acceptance and record results
 
-- [ ] Verify Hermes API connection, model selection where supported,
-  multi-step actions, continuation, cancellation, and failure recovery.
-- [ ] Verify OMP RPC connection, model selection, multi-step actions,
-  continuation, cancellation, and failure recovery.
-- [ ] Ensure Isle-owned assistant actions go through Isle's action and
-  approval path. Do not add MCP calls to the internal provider flow.
-- [ ] Keep OMP's native coding-agent tools and runtime behavior available.
-- [ ] Keep Hermes' personality and memory under Hermes' control.
-
-Acceptance: Hermes and OMP each complete multi-step tasks in the Isle UI,
-show progress, handle errors, and execute Isle-owned actions through Isle.
-
-### 4. Add Isle-managed context files for OMP
-
-- [ ] Define the Isle-owned locations and size limits for `SOUL.md`,
-  `USER.md`, and `MEMORY.md`.
-- [ ] Add Assistant Settings editors for the three files.
-- [ ] Load the files into OMP sessions.
-- [ ] Define safe memory updates before allowing OMP to write `MEMORY.md`.
-- [ ] Keep Hermes' own personality and memory untouched.
-
-Acceptance: edits affect the next OMP session, persist across restarts, and do
-not change Hermes' own identity or memory.
-
-### 5. Complete live acceptance and record results
-
+- [ ] Exercise OMP against the installed runtime, including an Isle action.
 - [ ] Exercise Hermes against the installed local API.
-- [ ] Exercise OMP against the installed runtime.
 - [ ] Connect an external MCP client using that client's own MCP settings.
 - [ ] Check representative reads and writes across all Isle feature areas,
   including a date-filtered calorie query.
-- [ ] Verify read scopes, write allowlists, authentication, invalid inputs,
+- [ ] Verify MCP scopes, write allowlists, authentication, invalid inputs,
   audit output, service restart, and continuation.
 
 Acceptance: record exact runtime/client versions and results in

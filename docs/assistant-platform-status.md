@@ -17,6 +17,21 @@ its user-facing flow is complete.
 - OMP has an RPC adapter, streaming/progress handling, session persistence,
   and model-catalog lookup code. Current source keeps OMP's native tools,
   extensions, skills, and rules.
+- The installed OMP CLI is v18.12.5. A minimal prompt to OMP's configured
+  default returned the expected text after about 57 seconds. A separate
+  one-prompt RPC run emitted `ready`, opened a session, streamed text deltas,
+  and ended with `prompt_result` `completed` after about 53 seconds. This
+  verifies the configured provider and RPC framing used by Isle; the request
+  has not yet been exercised through `isled` and the GNOME UI.
+- Running `omp models` locally took about 27 seconds. Settings no longer
+  requests OMP's entire catalog synchronously; it offers OMP's configured
+  default and an optional manual model ID.
+- Isle's current doctor check only confirms that the OMP executable exists;
+  OMP owns credentials for its many provider options. The source now reports
+  that OMP manages provider setup instead of claiming the binary is signed in.
+- Isle currently starts OMP with `--no-ui`. OMP documents that tools needing
+  interactive approval fail closed in this mode; the Isle adapter does not
+  yet surface that approval flow.
 - The in-app assistant has an Isle answer/action loop that executes Isle
   actions. The assistant does not use the external MCP server as its internal
   tool interface.
@@ -49,9 +64,11 @@ its user-facing flow is complete.
   external clients. Their MCP configuration belongs in Claude Code,
   Antigravity, Codex, or the relevant agent harness, not in Isle's assistant
   provider settings.
-- **Hermes and OMP acceptance:** verify their multi-step in-app assistant
-  flows, including Isle action execution, continuation, cancellation, and
-  errors against the installed runtimes.
+- **OMP acceptance:** verify an in-app model response, Isle action execution,
+  continuation, cancellation, and failures. Decide how to surface native OMP
+  tool approvals without enabling auto-approval.
+- **Hermes acceptance:** verify multi-step in-app requests, Isle action
+  execution, continuation, cancellation, and errors against the local API.
 - **OMP context:** add Isle-managed `SOUL.md`, `USER.md`, and `MEMORY.md` for
   OMP. Keep Hermes' own personality and memory intact.
 

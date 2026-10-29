@@ -17,6 +17,10 @@ context, the actions it executes, and the permissions for those actions.
 - **Oh My Pi:** connect through OMP's RPC interface. Keep OMP's native coding
   tools and runtime behavior. OMP can use Isle's in-app action path for
   Isle-owned actions; those actions still go through Isle's permissions.
+  OMP's configured default model is the normal choice; allow a manual
+  `provider/model` override without loading the full model catalog in Settings.
+  Native tools that need approval must keep their approval behavior; never
+  silently enable auto-approval to make headless calls pass.
 
 The target is a reliable multi-step assistant flow for both runtimes, including
 model selection where available, visible progress, action results,

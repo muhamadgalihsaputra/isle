@@ -29,9 +29,19 @@ directory.
 Current source keeps OMP's native tools, extensions, skills, and rules. Isle
 actions requested in the in-app assistant use Isle's action path. Isle-managed
 `SOUL.md`, `USER.md`, and `MEMORY.md` for OMP are part of the target but are
-not implemented yet. Previous live notes report that OMP v18.12.6 can reject
-the full model catalog because of its RPC response limit; verify this against
-the installed OMP version.
+not implemented yet. OMP v18.12.5 is installed on the audited machine. A
+direct prompt to its configured default returned text, and a one-prompt RPC
+round trip emitted `ready`, opened a session, streamed text deltas, and ended
+with `prompt_result` `completed`. This verifies the configured provider and
+RPC framing, but not a request through `isled` and the GNOME UI. The full
+`omp models` catalog took about 27 seconds to list, so Assistant Settings now
+uses OMP's configured default or an optional manual `provider/model` ID instead
+of fetching the entire catalog automatically.
+
+Isle starts OMP with `--mode rpc --no-ui`. OMP's RPC documentation says tools
+that require interactive approval fail closed in this mode. The current
+adapter does not yet surface OMP approval requests in Isle's UI; verify this
+behavior before relying on OMP tools that need approval.
 
 ## External AI agents through MCP
 
