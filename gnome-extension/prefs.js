@@ -38,7 +38,6 @@ export default class IslePreferences extends ExtensionPreferences {
         window.add(this._clipboardPage(settings, window));
         window.add(this._timerPage(settings, window));
         window.add(this._voicePage(settings, window));
-        window.add(this._wellbeingPage(settings));
         window.add(this._usagePage(settings));
         window.add(this._aboutPage(settings, window));
         // A page asked for by the island (its Update button: About), once, also while open.
@@ -370,36 +369,22 @@ export default class IslePreferences extends ExtensionPreferences {
         return page;
     }
 
-    _wellbeingPage(settings) {
-        const page = new Adw.PreferencesPage({title: 'Daily Life', icon_name: 'preferences-system-time-symbolic'});
-        const prayer = new Adw.PreferencesGroup({
-            title: 'Prayer times',
-            description: 'AlAdhan schedule using Indonesia’s Kemenag calculation method. Times follow the selected city.',
+    _dailyLifeGroup(settings) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Daily Life',
+            description: 'Prayer times use Indonesia’s Kemenag method. Configure these tabs here and show or hide them under Pages above.',
         });
-        const city = new Adw.EntryRow({title: 'City'});
-        const country = new Adw.EntryRow({title: 'Country'});
+        const city = new Adw.EntryRow({title: 'Prayer city'});
+        const country = new Adw.EntryRow({title: 'Prayer country'});
         settings.bind('prayer-city', city, 'text', Gio.SettingsBindFlags.DEFAULT);
         settings.bind('prayer-country', country, 'text', Gio.SettingsBindFlags.DEFAULT);
-        prayer.add(city);
-        prayer.add(country);
-        prayer.add(switchRow(settings, 'prayer-reminders', 'Prayer reminders', 'Show a reminder at each prayer time'));
-        page.add(prayer);
-
-        const calories = new Adw.PreferencesGroup({
-            title: 'Calories',
-            description: 'Log food and calories in the island. Entries stay on this computer.',
-        });
-        calories.add(spinRow(settings, 'calorie-goal', 'Daily calorie goal', 'Used by the progress ring', 500, 10000, 50));
-        page.add(calories);
-
-        const water = new Adw.PreferencesGroup({
-            title: 'Water tracker',
-            description: 'Choose the daily goal and how much one Drink tap logs.',
-        });
-        water.add(spinRow(settings, 'water-goal-ml', 'Daily water goal (ml)', 'Shown in the tracker', 500, 5000, 250));
-        water.add(spinRow(settings, 'water-serving-ml', 'Amount per drink (ml)', 'Logged by the Drink button', 100, 1000, 50));
-        page.add(water);
-        return page;
+        group.add(city);
+        group.add(country);
+        group.add(switchRow(settings, 'prayer-reminders', 'Prayer reminders', 'Show a reminder at each prayer time'));
+        group.add(spinRow(settings, 'calorie-goal', 'Daily calorie goal', 'Used by the progress ring', 500, 10000, 50));
+        group.add(spinRow(settings, 'water-goal-ml', 'Daily water goal (ml)', 'Shown in the tracker', 500, 5000, 250));
+        group.add(spinRow(settings, 'water-serving-ml', 'Amount per drink (ml)', 'Logged by the Drink button', 100, 1000, 50));
+        return group;
     }
 
     // Look, pages, world clocks, alerts and calls.
@@ -434,6 +419,7 @@ export default class IslePreferences extends ExtensionPreferences {
         page.add(pagesGroup(settings, window));
         page.add(worldClocksGroup(settings, window));
         page.add(weatherGroup(settings, window));
+        page.add(this._dailyLifeGroup(settings));
 
         const alerts = new Adw.PreferencesGroup({title: 'Alerts'});
         // On: in the island; off: left to GNOME's own banners (`gnome-banners`).
@@ -847,6 +833,9 @@ const PAGES = [
     ['reminders', 'Reminders', 'object-select-symbolic', 'Your to-do list'],
     ['shelf', 'Shelf', 'edit-paste-symbolic', 'Clipboard history (Super+V) and the files tray'],
     ['calendar', 'Calendar', 'x-office-calendar-symbolic', 'The month, its events and world clocks'],
+    ['calories', 'Calories', 'accessories-calculator-symbolic', 'Your food log and daily calorie goal'],
+    ['water', 'Water', 'weather-showers-symbolic', 'Your water log and daily hydration goal'],
+    ['prayer', 'Prayer', 'preferences-system-time-symbolic', 'Prayer times for your selected city'],
 ];
 
 /** A switch per page; the last one on can't be turned off, so the island always has a page. */

@@ -127,7 +127,7 @@
     <key name="hidden-pages" type="as">
       <default>[]</default>
       <summary>Pages left out of the island</summary>
-      <description>Names of the open island’s pages that have no tab: music, notifications, focus, reminders, shelf, calendar.</description>
+      <description>Names of the open island’s pages that have no tab: music, notifications, focus, reminders, shelf, calendar, calories, water, prayer.</description>
     </key>
     <key name="agent-alerts-claude" type="b">
       <default>true</default>

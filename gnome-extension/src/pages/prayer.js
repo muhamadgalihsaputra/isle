@@ -112,7 +112,7 @@ class PrayerPage extends Page {
             this._column.add_child(this._heading(schedule?.city));
             const text = schedule?.status === 'error'
                 ? 'Could not load prayer times. Check your connection.'
-                : 'Set a city in Settings → Daily Life';
+                : 'Set a city in Settings → Island → Daily Life';
             this._column.add_child(label(text, 'isle-prayer-empty', {
                 x_align: Clutter.ActorAlign.CENTER,
                 y_expand: true,
