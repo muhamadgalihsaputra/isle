@@ -27,13 +27,14 @@ Source implementation and live acceptance are tracked in
 
 - [x] Avoid fetching OMP's full model catalog synchronously from Settings.
 - [x] Verify the configured default responds through OMP's RPC protocol.
+- [x] Verify a native OMP bash tool runs through RPC under OMP's configured
+  permissions.
 - [ ] Verify the in-app OMP process starts, accepts a prompt, streams a reply,
   and returns Isle actions through the existing answer/action loop.
 - [ ] Verify OMP's configured default model and manually entered `provider/id`
   both work.
-- [ ] Check native OMP tools that need interactive approval. Isle currently
-  starts OMP headless; preserve OMP's permission behavior and do not silently
-  auto-approve those tools.
+- [ ] Decide how to surface OMP's interactive approval prompts in Isle. Until
+  then, preserve OMP's permission behavior; never silently auto-approve calls.
 - [ ] Verify session continuation, cancellation, failures, and warm startup.
 
 Acceptance: OMP answers and performs an Isle action in the Isle UI, reports

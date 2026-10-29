@@ -409,12 +409,13 @@ Without any of them, Super+I says what to install, and the rest of Isle works
 as before.
 
 **Safety:** Isle's desktop actions and command cards follow the permissions
-below. OMP also keeps its own tools and follows the tool permissions you set
-in OMP; these are separate from Isle's command cards. Isle does not show OMP's
-interactive tool approvals yet, so OMP calls that require approval fail closed
-in this integration ([OMP RPC behavior](https://github.com/can1357/oh-my-pi/blob/main/docs/rpc.md)).
-Review OMP's tool permissions before using it. Claude Code, Codex, and
-Antigravity are started with the restricted tools described below.
+below. OMP's native tools stay enabled and follow the permissions you set in
+OMP; they are separate from Isle's command cards. Isle runs OMP headlessly
+and does not show OMP's interactive approval dialogs yet, so only tool calls
+that need such a dialog fail closed ([OMP RPC behavior](https://github.com/can1357/oh-my-pi/blob/main/docs/rpc.md)).
+Isle does not change OMP's approval mode or add auto-approval. Review OMP's
+tool permissions before using it. Claude Code, Codex, and Antigravity use the
+restricted tools described below.
 
 - **Looking** runs at once, without asking, but only programs on a fixed
   list that only read (`uname`, `cat /etc/os-release`, `apt-cache policy`,

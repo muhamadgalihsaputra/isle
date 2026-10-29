@@ -32,16 +32,20 @@ actions requested in the in-app assistant use Isle's action path. Isle-managed
 not implemented yet. OMP v18.12.5 is installed on the audited machine. A
 direct prompt to its configured default returned text, and a one-prompt RPC
 round trip emitted `ready`, opened a session, streamed text deltas, and ended
-with `prompt_result` `completed`. This verifies the configured provider and
-RPC framing, but not a request through `isled` and the GNOME UI. The full
+with `prompt_result` `completed`. A bash-only RPC check also executed a fixed
+`printf` command, emitted OMP's tool start/end events, and returned the output.
+This verifies the configured provider, RPC framing, and that native tools stay
+enabled under the OMP permission settings; it does not verify a request
+through `isled` and the GNOME UI. The full
 `omp models` catalog took about 27 seconds to list, so Assistant Settings now
 uses OMP's configured default or an optional manual `provider/model` ID instead
 of fetching the entire catalog automatically.
 
-Isle starts OMP with `--mode rpc --no-ui`. OMP's RPC documentation says tools
-that require interactive approval fail closed in this mode. The current
-adapter does not yet surface OMP approval requests in Isle's UI; verify this
-behavior before relying on OMP tools that need approval.
+Isle starts OMP with `--mode rpc --no-ui`; this does not disable OMP's native
+tools. OMP's RPC documentation says calls that require interactive approval
+fail closed in this mode. Isle does not change OMP's permission settings or
+silently enable auto-approval. Approval-dialog handling in Isle's UI remains
+unimplemented.
 
 ## External AI agents through MCP
 

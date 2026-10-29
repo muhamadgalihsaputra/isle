@@ -21,17 +21,20 @@ its user-facing flow is complete.
   default returned the expected text after about 57 seconds. A separate
   one-prompt RPC run emitted `ready`, opened a session, streamed text deltas,
   and ended with `prompt_result` `completed` after about 53 seconds. This
-  verifies the configured provider and RPC framing used by Isle; the request
-  has not yet been exercised through `isled` and the GNOME UI.
+  verifies the configured provider and RPC framing used by Isle. A bash-only
+  RPC check executed a fixed `printf` command, emitted tool start/end events,
+  and returned the output; OMP's native tools are enabled under its own
+  permissions. These checks have not exercised `isled` and the GNOME UI.
 - Running `omp models` locally took about 27 seconds. Settings no longer
   requests OMP's entire catalog synchronously; it offers OMP's configured
   default and an optional manual model ID.
 - Isle's current doctor check only confirms that the OMP executable exists;
   OMP owns credentials for its many provider options. The source now reports
   that OMP manages provider setup instead of claiming the binary is signed in.
-- Isle currently starts OMP with `--no-ui`. OMP documents that tools needing
-  interactive approval fail closed in this mode; the Isle adapter does not
-  yet surface that approval flow.
+- Isle starts OMP with `--mode rpc --no-ui`, which leaves native tools enabled.
+  OMP documents that a tool call needing interactive approval fails closed in
+  this mode. Isle does not override OMP's permission mode or surface those
+  approval dialogs in its UI yet.
 - The in-app assistant has an Isle answer/action loop that executes Isle
   actions. The assistant does not use the external MCP server as its internal
   tool interface.
