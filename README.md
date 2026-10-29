@@ -410,13 +410,15 @@ as before.
 
 **Safety:** Isle's desktop actions and command cards follow the permissions
 below. OMP's native tools stay enabled and follow the permissions you set in
-OMP; they are separate from Isle's command cards. When OMP asks permission for
-a native tool, Isle shows its Allow / Deny alert and sends your choice back to
-OMP. Dismissing the alert or being unable to show it denies the request. Isle
-does not change OMP's approval mode or add auto-approval. Other interactive UI
-requests from OMP extensions are cancelled. Review OMP's tool permissions
-before using it. Claude Code, Codex, and Antigravity use the restricted tools
-described below.
+OMP; they are separate from Isle's command cards. In an Isle session, OMP
+uses `always-ask`: read-only tools can run, and write or execution tools ask
+through Isle's Allow / Deny alert. Isle preserves OMP's explicit deny rules
+and changes an explicit `bash: allow` to `prompt` for that session, so shell
+commands can be approved in Isle. The global OMP config is not edited.
+Dismissing the alert or being unable to show it denies the request. Other
+interactive UI requests from OMP extensions are cancelled. Review OMP's tool
+permissions before using it. Claude Code, Codex, and Antigravity use the
+restricted tools described below.
 
 - **Looking** runs at once, without asking, but only programs on a fixed
   list that only read (`uname`, `cat /etc/os-release`, `apt-cache policy`,

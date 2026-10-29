@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use serde_json::{Value, json};
@@ -49,17 +50,20 @@ impl Omp {
                 workspace.join(format!("omp-{}-{id}", std::process::id()))
             });
         std::fs::create_dir_all(&session_dir)?;
+        let approval_config = approval_config(program, &session_dir, workspace).await?;
         let mut command = Command::new(program);
-        // Keep OMP's configured tools, extensions, skills, and rules. rpc-ui
-        // lets Isle relay native-tool approval prompts through its own alerts.
+        // Keep OMP's tools, extensions, skills, and rules, but ask Isle before
+        // write/exec calls. rpc-ui sends those prompts through Isle's alerts.
         command
             .args([
                 "--mode",
                 "rpc-ui",
-                "--append-system-prompt",
-                instructions,
-                "--session-dir",
+                "--approval-mode",
+                "always-ask",
+                "--config",
             ])
+            .arg(&approval_config)
+            .args(["--append-system-prompt", instructions, "--session-dir"])
             .arg(&session_dir);
         if !model.is_empty() {
             command.args(["--model", model]);
@@ -289,6 +293,44 @@ impl Omp {
         }
         let _ = std::fs::remove_dir_all(path);
     }
+}
+
+/// Isle-run OMP sessions ask before writes and execution. Preserve OMP's explicit denies, but turn
+/// an explicit bash allow into a prompt so native shell calls can be approved in Isle.
+async fn approval_config(
+    program: &Path,
+    session_dir: &Path,
+    workspace: &Path,
+) -> anyhow::Result<PathBuf> {
+    let mut command = Command::new(program);
+    command.args(["config", "get", "tools.approval"]);
+    command.current_dir(workspace).kill_on_drop(true);
+    if let Some(path) = child::path_for(program) {
+        command.env("PATH", path);
+    }
+    let output = tokio::time::timeout(Duration::from_secs(5), command.output())
+        .await
+        .context("timed out reading Oh My Pi's tool approval settings")?
+        .context("could not read Oh My Pi's tool approval settings")?;
+    if !output.status.success() {
+        bail!("Oh My Pi could not read its tool approval settings");
+    }
+    let mut policies: serde_json::Map<String, Value> = serde_json::from_slice(&output.stdout)
+        .context("Oh My Pi returned invalid tool approval settings")?;
+    if policies
+        .get("bash")
+        .and_then(Value::as_str)
+        .is_none_or(|policy| !policy.eq_ignore_ascii_case("deny"))
+    {
+        policies.insert("bash".into(), json!("prompt"));
+    }
+    let path = session_dir.join("isle-approval.json");
+    std::fs::write(
+        &path,
+        serde_json::to_vec(&json!({"tools":{"approval":policies}}))?,
+    )
+    .context("could not write Isle's Oh My Pi approval policy")?;
+    Ok(path)
 }
 
 /// OMP labels its shell/file permission chooser `Allow tool: <name>` and puts the exact action on the next line.

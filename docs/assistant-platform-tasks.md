@@ -30,8 +30,9 @@ Source implementation and live acceptance are tracked in
 - [x] Verify a native OMP bash tool runs through RPC under OMP's configured
   permissions.
 - [x] Route OMP native-tool approval requests through Isle's existing agent
-  Allow / Deny alert and return the choice to OMP without changing OMP's
-  permission settings.
+  Allow / Deny alert and return the choice to OMP. Use a session-only
+  `always-ask` policy for write/exec calls, keep explicit deny rules, and do
+  not edit OMP's global config.
 - [ ] Verify an OMP native-tool approval in a live Isle UI: Allow, Deny,
   dismissed alert, and alert unavailable.
 - [ ] Verify the in-app OMP process starts, accepts a prompt, streams a reply,

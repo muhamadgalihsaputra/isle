@@ -22,10 +22,11 @@ the provider and keeps it up for the next turns until dropped.
 - CLI providers (Claude, Codex, Antigravity) spawn their process through
   `child::spawn`: its own process group, lowered priority, killed when its
   `Group` drops.
-- Oh My Pi spawns `omp --mode rpc-ui` with its native tools, extensions,
-  skills, and rules enabled, then opens its session (`open_session`). Native
-  tool approval requests use Isle's agent alert; other interactive extension
-  dialogs are cancelled.
+- Oh My Pi spawns `omp --mode rpc-ui --approval-mode always-ask` with its
+  native tools, extensions, skills, and rules enabled, then opens its session
+  (`open_session`). A session-only overlay changes explicit `bash: allow` to
+  `prompt` and preserves `deny` rules. Native tool approvals use Isle's agent
+  alert; other interactive extension dialogs are cancelled.
 - Hermes and OpenAI-compatible endpoints build an API client instead of
   a process, and load their per-provider conversation history from the
   private data directory.

@@ -31,13 +31,18 @@ its user-facing flow is complete.
 - Isle's current doctor check only confirms that the OMP executable exists;
   OMP owns credentials for its many provider options. The source now reports
   that OMP manages provider setup instead of claiming the binary is signed in.
-- Isle starts OMP with `--mode rpc-ui`, which keeps native tools enabled and
-  relays OMP's native-tool approval prompts through Isle's existing Allow /
-  Deny alert used for Claude Code and Codex. Isle returns the chosen response
-  to OMP. An unavailable or dismissed alert denies the request. Isle does not
-  override OMP's permission mode; unrelated interactive extension dialogs are
-  cancelled.
-- A temporary OMP bash `prompt` rule and harmless `printf` command produced an
+- Isle starts OMP with `--mode rpc-ui --approval-mode always-ask`. Read-only
+  calls can run; write/exec calls use the existing Isle Allow / Deny alert
+  used for Claude Code and Codex, and Isle returns the choice to OMP. A
+  session-only overlay changes an explicit `bash: allow` to `prompt` and
+  preserves explicit `deny` rules. Other explicit per-tool policies remain
+  active. The user's global OMP config is not edited. An unavailable or
+  dismissed alert denies the request; unrelated interactive extension
+  dialogs are cancelled.
+- The installed OMP global config reports `tools.approvalMode: yolo` and
+  `tools.approval.bash: allow`; the Isle-launched session now overrides these
+  at runtime only, without editing that config. A temporary OMP bash `prompt`
+  rule and harmless `printf` command produced an
   `extension_ui_request` (`select`, title `Allow tool: bash`, options `Approve`
   and `Deny`). The corresponding response uses `extension_ui_response` with
   the selected option. This confirms the RPC bridge format. It does not verify
