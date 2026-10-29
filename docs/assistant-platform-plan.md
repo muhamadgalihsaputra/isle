@@ -1,107 +1,103 @@
-# Isle Assistant Platform: Target Architecture
+# Isle Assistant and MCP: Target Architecture
 
-This is the target for the fork's assistant platform. Current implementation
-status is tracked separately in [assistant-platform-status.md](assistant-platform-status.md);
-ordered engineering work is in [assistant-platform-tasks.md](assistant-platform-tasks.md).
+This document describes two separate products: the assistant that runs inside
+Isle, and the MCP server that lets AI agents outside Isle use Isle's features.
+Current implementation is in [assistant-platform-status.md](assistant-platform-status.md);
+remaining work is in [assistant-platform-tasks.md](assistant-platform-tasks.md).
 
-## Purpose
+## 1. Assistant inside Isle
 
-Isle is the assistant harness. It owns provider selection, Isle-specific
-context, tool discovery and execution, permissions, approvals, and the UI that
-shows progress. Hermes is the primary runtime. Oh My Pi is an additional
-coding-agent runtime, and a direct OpenAI-compatible endpoint is an optional
-BYOK runtime.
+The in-app assistant is Isle's own harness. Its supported runtimes are Hermes
+Agent and Oh My Pi (OMP). Isle owns provider selection, its UI, Isle-specific
+context, the actions it executes, and the permissions for those actions.
 
-The target is not met by showing provider names or settings controls alone.
-Each selectable runtime must complete a real multi-step request through Isle,
-with working model selection, Isle tools, results, continuation, cancellation,
-and errors.
+- **Hermes Agent:** connect to Hermes through its local API. Keep Hermes'
+  identity, personality, memory, and native runtime behavior. Isle handles
+  Isle-owned desktop actions through its own action and approval path.
+- **Oh My Pi:** connect through OMP's RPC interface. Keep OMP's native coding
+  tools and runtime behavior. OMP can use Isle's in-app action path for
+  Isle-owned actions; those actions still go through Isle's permissions.
 
-## Runtime responsibilities
+The target is a reliable multi-step assistant flow for both runtimes, including
+model selection where available, visible progress, action results,
+continuation, cancellation, and useful errors.
 
-- **Hermes Agent:** connect to Hermes' local API. Preserve Hermes' own
-  identity, personality, memory, and native runtime behavior. Isle adds its
-  desktop context and keeps Isle-controlled actions behind Isle's permission
-  and approval path.
-- **Oh My Pi:** connect through OMP's RPC interface. Isle-specific capabilities
-  must be available through Isle's tool registry and permission path; OMP
-  native tools must not bypass Isle's controls for Isle-owned operations.
-- **OpenAI-compatible BYOK:** let the user enter a base URL and API key in
-  Assistant Settings, fetch the endpoint's model list, and choose a model.
-  Keep the key out of GSettings and logs; store it in a user-private config
-  file. Route tool calls through Isle's tool registry and executor.
-- **Other coding-agent providers:** keep their existing provider-specific
-  connection and approval behavior while giving them the same Isle-managed
-  context and tool surface where supported.
+Direct OpenAI-compatible BYOK is not a target provider for the in-app
+assistant. AI agents that use OpenAI-compatible models can use their existing
+harness and connect to Isle through the external MCP server described below.
+Existing provider code outside Hermes and OMP is not part of this target.
 
-## Isle tool surface
+## 2. MCP for AI agents outside Isle
 
-Every Isle feature that can be exposed safely must be represented in one
-explicit Isle-owned MCP tool registry. The same registry and executor should
-serve both the assistant inside Isle and external MCP clients; do not maintain
-a smaller, unrelated tool list for each path. Any feature excluded for a
-specific security or technical reason must have that reason documented.
+The MCP server is an external interface to Isle's features. It wraps Isle's
+data and actions as MCP tools so agents such as Claude Code, Antigravity, or
+Codex can call them. Configure the MCP endpoint and credentials in the external agent's own
+MCP settings. This is not an internal tool protocol for the assistant inside
+Isle, and the external agent's model or API key is not configured in Isle.
 
-Inventory every page and action before calling the tool surface complete. This
-includes every Isle page and action: task, reminder, calendar, focus, media,
-prayer, calorie, water, clipboard/shelf, notifications, calls, usage, and other
-Isle-owned capabilities found in the inventory. Each tool needs a typed input
-and result, a permission category, auditable execution, and a clear rule for
-whether it runs directly or asks the user for approval. Provider-native tools
-must not bypass approvals for Isle actions.
+The MCP surface must cover all Isle pages and capabilities, including useful
+ways to query their data. For example, an agent must be able to request food
+entries for a specific date or date range and receive the matching records;
+it must not only be able to add a food entry. Inventory every existing Isle
+read and action, including tasks, reminders, calendar, focus, media, prayer,
+calories, water, clipboard/shelf, notifications, calls, usage, and any other
+Isle-owned capability. Define typed inputs and results for each operation.
 
-## Isle-managed context
+Apply per-client scopes and write allowlists. Read-only data queries should be
+available under read scopes; writes and sensitive desktop actions need the
+appropriate authorization and audit trail. If a capability cannot be exposed,
+record its specific technical or security reason and provide the closest
+useful supported operation where possible.
 
-For coding-agent runtimes other than Hermes, Isle manages three context files:
+The MCP server and the in-app assistant may call the same underlying Isle
+services, but they remain separate interfaces with separate clients and setup.
+Do not require the in-app Hermes or OMP adapter to speak MCP.
 
-- SOUL.md: the agent's personality and working style.
-- USER.md: stable information and preferences about the user.
-- MEMORY.md: durable facts and decisions to carry between conversations.
+## Isle-managed context for OMP
 
-Keep these as Isle-owned files, editable from Assistant Settings, and include
-them in the supported non-Hermes coding-agent context. Hermes continues to
-manage its own personality and memory. Conversation transcripts are separate
-from these durable context files. File location, size limits, and how agents
-may propose memory edits must be settled in the implementation task before
-those files are written automatically.
+Isle manages three context files for OMP, the non-Hermes runtime in the
+in-app assistant:
 
-## Assistant Settings
+- `SOUL.md`: personality and working style.
+- `USER.md`: stable information and preferences about the user.
+- `MEMORY.md`: durable facts and decisions to carry between conversations.
 
-Assistant Settings must let the user:
+Make these editable in Assistant Settings and include them in OMP sessions.
+Hermes continues to manage its own personality and memory. Conversation
+transcripts are separate from these context files. Define file locations,
+size limits, and safe memory updates before allowing automatic writes.
 
-- select Hermes, OMP, or an OpenAI-compatible endpoint;
-- enter and save the BYOK base URL and API key securely;
-- fetch, inspect, and select models, with useful connection and fetch errors;
-- edit Isle-managed SOUL.md, USER.md, and MEMORY.md for non-Hermes agents;
-- configure the shared Isle tool permissions and review the applicable
-  approval behavior.
+## Settings boundaries
 
-The current free-text Custom instructions field is not a replacement for the
-three context files.
+Assistant Settings configure the in-app Hermes or OMP runtime, model where
+available, and Isle-managed OMP context. MCP client setup belongs in the
+external agent's own MCP settings; Isle's MCP server configuration covers its
+endpoint, authentication, and permissions. Do not add an OpenAI-compatible
+provider, base-URL field, or model API-key field to Assistant Settings for
+this target.
 
 ## Security and reliability
 
-- Store API keys outside ordinary GSettings values, with user-only file
-  permissions, and never include secrets in logs or diagnostics.
+- Keep Hermes and OMP secrets out of logs and diagnostics; preserve their
+  runtime-specific secure configuration.
 - Keep sensitive D-Bus caller checks in place.
-- Default MCP network exposure to loopback. Require authentication for
-  non-loopback binds.
-- Apply the same read, data-write, and risky-desktop-action permissions to
-  internal assistant calls and external MCP clients.
-- Verify connection failure, malformed model lists, tool errors, cancellation,
-  continuation, and provider restarts.
+- Default the MCP server to loopback. Require authentication for non-loopback
+  binds and use per-client scopes and write allowlists.
+- Apply read, data-write, and sensitive-action permissions consistently to
+  MCP calls. Do not expose unrestricted D-Bus operations as tools.
+- Verify invalid inputs, date filters, authorization failures, tool errors,
+  cancellation, continuation, and service restarts.
 
 ## Acceptance
 
-The platform is complete when:
-
-1. Hermes, OMP, and a configured OpenAI-compatible endpoint each complete a
-   multi-step request in the Isle assistant UI.
-2. The BYOK user can configure the endpoint and key in Settings, fetch models,
-   select one, and use it without editing files manually.
-3. Isle capabilities are discoverable and callable as MCP tools by supported
-   runtimes and external MCP clients, with consistent permissions and results.
-4. Non-Hermes coding agents receive the three Isle-managed context files;
-   Hermes' own identity and memory remain untouched.
-5. Local and live-provider checks cover approvals, model discovery, tool
-   results, cancellation, continuation, and secret handling.
+1. Hermes and OMP each complete a multi-step request in the Isle assistant UI
+   and route Isle-owned actions through Isle's permission path.
+2. An external MCP client can discover and use tools for every inventoried
+   Isle capability, with useful read queries as well as actions. For example,
+   a date-filtered calorie query returns the matching data.
+3. An external agent connects using its own MCP settings and receives results
+   from Isle; its model/provider credentials remain in that agent's harness.
+4. MCP read scopes, write allowlists, authentication, and audit behavior are
+   verified for local and authenticated network access.
+5. OMP receives Isle-managed `SOUL.md`, `USER.md`, and `MEMORY.md`; Hermes'
+   own identity and memory remain untouched.

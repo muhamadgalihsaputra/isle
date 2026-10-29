@@ -1,66 +1,52 @@
-# Assistant Runtimes: Current Setup and Gaps
+# Isle Assistant Runtimes and External MCP
 
-The source includes Hermes Agent, Oh My Pi, OpenAI-compatible BYOK, and the
-existing coding-agent CLIs. Isle currently receives an Isle answer/action
-format and runs its own action loop. This is not yet the shared MCP
-tool-calling architecture in [assistant-platform-plan.md](assistant-platform-plan.md).
-See [assistant-platform-status.md](assistant-platform-status.md) for audited
-implementation status.
+Isle's in-app assistant target is Hermes Agent and Oh My Pi (OMP). A separate
+MCP server exposes Isle data and actions to AI agents running outside Isle.
+The external agent connects using its own MCP settings; it is not another
+provider in Isle's Assistant Settings. See the [platform plan](assistant-platform-plan.md)
+and [implementation audit](assistant-platform-status.md).
 
-## Hermes Agent
+## Hermes Agent inside Isle
 
-The current adapter uses Hermes' local API server. In ~/.hermes/.env, set
-API_SERVER_ENABLED=true and a strong API_SERVER_KEY, then run hermes gateway.
-Keep the API server bound to its default loopback address. Isle reads the key
-from that file and connects to http://127.0.0.1:8642/v1.
+The current adapter uses Hermes' local API server. In `~/.hermes/.env`, set
+`API_SERVER_ENABLED=true` and a strong `API_SERVER_KEY`, then run
+`hermes gateway`. Keep the API server bound to its default loopback address.
+Isle reads the key from that file and connects to `http://127.0.0.1:8642/v1`.
 
 Hermes keeps its own personality, memory, and native runtime behavior. Isle
 adds its desktop instructions and executes Isle actions through Isle's action
 loop. Live multi-step tool use and cancellation still need validation against
 the installed Hermes version.
 
-## OpenAI-compatible API (BYOK)
+## Oh My Pi inside Isle
 
-The current backend reads these values from ~/.config/isle/ai.env or the
-service environment:
+Install and configure `omp` with the provider and model you want. Select Oh My
+Pi in Assistant Settings; the model is optional, and an empty field uses
+OMP's configured default. Isle starts OMP in RPC mode, appends Isle
+instructions, and stores the conversation under Isle's private data
+directory.
 
-    ISLE_OPENAI_BASE_URL=https://api.example.com/v1
-    ISLE_OPENAI_API_KEY=your-key
+Current source keeps OMP's native tools, extensions, skills, and rules. Isle
+actions requested in the in-app assistant use Isle's action path. Isle-managed
+`SOUL.md`, `USER.md`, and `MEMORY.md` for OMP are part of the target but are
+not implemented yet. Previous live notes report that OMP v18.12.6 can reject
+the full model catalog because of its RPC response limit; verify this against
+the installed OMP version.
 
-If using the file, create it with user-only permissions:
+## External AI agents through MCP
 
-    chmod 600 ~/.config/isle/ai.env
+Use Isle's optional MCP server when an agent outside Isle needs Isle data or
+actions. Configure the MCP endpoint and any required bearer token in that
+agent's own MCP settings (for example, in Claude Code, Antigravity, or Codex).
+Isle does not configure the external agent's model, provider, or API key.
 
-The backend has model discovery for /models and /v1/models and a streaming chat
-client. Assistant Settings currently has a model ID field and model picker,
-but no base-URL or API-key controls; configuring the endpoint still requires
-editing ai.env manually. The chat client currently asks the model for Isle's
-JSON answer/action format. It does not yet send MCP tool definitions and
-execute MCP tool calls.
+The current server exposes only a selected set of tools. The target is to
+expose all Isle data and actions, including useful filtered reads such as
+calories for a requested date. See [MCP server setup and current coverage](mcp.md).
 
-Do not put the API key in GSettings or diagnostic output. The end-to-end
-configure, fetch, select, and chat flow has not been verified against a live
-compatible endpoint.
+## Scope note
 
-## Oh My Pi
-
-Install and configure omp with the provider/model you want. Select Oh My Pi in
-Assistant Settings; the model is optional, and an empty field uses OMP's
-configured default. Isle starts omp in RPC mode, appends Isle instructions,
-and stores the conversation under Isle's private data directory.
-
-Current source keeps OMP's native tools, extensions, skills, and rules. This
-does not yet route Isle-owned capabilities through a shared Isle MCP registry.
-The OMP catalog lookup is implemented, but previous live notes report that
-OMP v18.12.6 can reject the full catalog because of its RPC response limit.
-Verify this against the installed OMP version before relying on model
-discovery.
-
-## Target
-
-The intended design is documented in
-[assistant-platform-plan.md](assistant-platform-plan.md): an Isle-owned MCP
-tool surface for Isle capabilities; BYOK endpoint and key configuration in
-Assistant Settings; model fetching; and Isle-managed SOUL.md, USER.md, and
-MEMORY.md for supported non-Hermes coding agents. Hermes retains its own
-personality and memory.
+OpenAI-compatible BYOK and other coding-agent adapters exist in source, but
+they are not target runtimes for the assistant built into Isle. Use the
+existing external agent harness for those providers and connect it to Isle
+through MCP when it needs Isle capabilities.

@@ -7,6 +7,11 @@ the set of six operations every arm must honor. The enum dispatch in
 `brain.rs` is the boundary; a provider that cannot honor an operation
 says so by doing nothing for it, never by faking it.
 
+This describes the current source architecture. The target for the assistant
+inside Isle is Hermes and Oh My Pi (OMP); the other adapters listed here are
+existing code outside this target. Agents outside Isle connect to the separate
+MCP server through their own client settings.
+
 ## The six operations
 
 ### start
@@ -43,10 +48,9 @@ the provider and keeps it up for the next turns until dropped.
 - The answer is always Isle's action JSON (see `answer.rs`): every
   provider returns it, and Isle runs or asks approval for those Isle actions.
   This describes the current answer/action path; Hermes and OMP can also keep
-  their own native tools. Those native tools are not the shared Isle MCP tool
-  interface in the target design. Hermes connects with full access: it keeps
-  its own tools, answers as Isle's agent, and Isle runs the desktop actions it
-  asks for.
+  their own native tools. The external MCP server is a separate interface for
+  outside agents. Hermes connects with full access: it keeps its own tools,
+  answers as Isle's agent, and Isle runs the desktop actions it asks for.
 
 ### stream
 
@@ -99,7 +103,8 @@ legitimately long answers.
 
 - The external MCP server is not a provider: today it exposes a selected set
   of Isle tools to external agents and does not answer as the assistant. It is
-  not yet the internal tool path for Hermes, OMP, or BYOK.
+  separate from the in-app assistant's answer/action path. External agents
+  connect to it through their own MCP settings.
 - Model discovery is not part of a turn: `ListModels` (Hermes and
   OpenAI-compatible endpoints via `/models`, Oh My Pi via RPC
   `get_available_models`) feeds the settings picker only.
@@ -109,11 +114,17 @@ legitimately long answers.
   its own personality and memory files, and Isle only adds its desktop
   instructions.
 
-## Target tool boundary
+## Target product boundary
 
-The current BYOK API sends Isle's JSON answer/action schema and then uses
-Isle's existing action runner. OMP currently keeps its native tools. Neither
-path is yet the target shared MCP tool-call interface. The target is one
-Isle-owned registry and executor used by the assistant inside Isle and the
-external MCP service, with the same tool schemas, permissions, approvals, and
-results. See [assistant-platform-plan.md](assistant-platform-plan.md).
+The in-app assistant target is Hermes and OMP. Both use Isle's in-app
+answer/action path for Isle-owned actions; Isle applies its own permission and
+approval checks there. OMP keeps its native coding-agent tools and runtime
+behavior. The target does not require Hermes or OMP to call MCP.
+
+The external MCP server has a different purpose: expose all Isle data and
+actions as tools to agents running outside Isle. The external agent stores the
+connection in its own MCP settings. The server's tool surface is not a provider
+inside `Brain`, and its MCP setup does not belong in Isle's assistant provider
+settings. Underlying Isle service code may be reused, but the two clients and
+interfaces stay distinct. See
+[assistant-platform-plan.md](assistant-platform-plan.md).

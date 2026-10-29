@@ -1,14 +1,18 @@
-# Isle MCP server
+# Isle MCP server for external AI agents
 
-Isle can expose selected local tools to MCP clients over Streamable HTTP. This
-page documents the external service that is currently implemented.
+Isle exposes local Isle data and actions as MCP tools for AI agents running
+outside Isle. The agent's MCP settings (for example, in Claude Code,
+Antigravity, or Codex) point to this service; this is not a provider or internal tool interface for
+the assistant inside Isle. This page documents the external service that is
+currently implemented.
 
 ## Current implementation boundary
 
-This is the optional **external** MCP service. It is not currently the tool
-interface used by the assistant running inside Isle. The in-Isle assistant
-uses its existing answer/action loop; OpenAI-compatible replies do not yet
-make MCP tool calls.
+This is the optional **external** MCP service. It is not the tool interface
+used by the assistant running inside Isle. The in-Isle assistant uses its
+existing answer/action loop with Hermes or OMP; it does not need to call this
+MCP server. Configure the MCP connection in the external agent's own settings,
+not in Isle's Assistant Settings.
 
 The current service exposes tasks, Isle calendar events, reminders, calorie
 entries, prayer schedule/location, current media controls, focus timer state
@@ -17,10 +21,14 @@ or action. For example, the Water D-Bus service has no MCP tool, and clipboard
 or shelf contents, notifications, calls, and other desktop actions are not in
 this service's tool list.
 
-The target is one Isle-owned tool registry and executor shared by the internal
-assistant and external MCP clients, covering every Isle feature that can be
-exposed safely with the same permissions and approval rules. Any exclusions
-need a documented reason. The target and its incomplete work are tracked in
+The target is an external MCP tool surface that covers all Isle data and
+actions. It must support useful reads as well as writes: for example, an
+external agent should be able to request calories for a specific date or date
+range and receive those records, such as `get_calories(date="2026-02-27")`.
+This is a target example, not a tool available in the current service.
+Inventory every Isle page and capability. Any exclusion needs a specific
+technical or security reason. Calls should use Isle services and enforce
+client scopes, write allowlists, and auditing. The target and its incomplete work are tracked in
 [assistant-platform-plan.md](assistant-platform-plan.md)
 and [assistant-platform-tasks.md](assistant-platform-tasks.md).
 
@@ -46,7 +54,10 @@ Enable the user service:
 systemctl --user enable --now isle-mcp.service
 ```
 
-The endpoint is `http://127.0.0.1:8765/mcp`. For a network bind, set a bearer
+The endpoint is `http://127.0.0.1:8765/mcp`. Add this endpoint, and the bearer
+token if configured, to the MCP settings of the external agent that should use
+Isle. Each agent has its own way to store MCP server connections. For a
+network bind, set a bearer
 token in the private environment file too:
 
 ```ini
@@ -77,17 +88,20 @@ Each token is bound to its own scopes and client name. A caller's MCP
 `client_id` is not used as an authorization identity.
 
 Read tools expose Isle tasks, calendar events, reminders, calorie entries,
-prayer times, focus timer state, and current media. Write tools are disabled unless named in
-`ISLE_MCP_WRITE_TOOLS`. Available write names are `add_task`, `set_task_done`,
+prayer times, focus timer state, and current media. Write tools are disabled
+unless named in `ISLE_MCP_WRITE_TOOLS`. Available write names are `add_task`, `set_task_done`,
 `add_calendar_event`, `remove_calendar_event`, `add_reminder`, `add_food_entry`,
 `update_food_entry`, `remove_food_entry`, `set_prayer_location`, `start_focus`,
 `pause_focus`, `stop_focus`, `control_media`, and `open_url`. `control_media`
-permits play/pause, next, and previous. `open_url` opens an HTTP(S) URL through the desktop portal and needs
-the `desktop:write` scope and the matching write allowlist entry.
+permits play/pause, next, and previous. `open_url` opens an HTTP(S) URL through
+the desktop portal and needs the `desktop:write` scope and the matching write
+allowlist entry.
 
 Prayer city and country are set in Isle Settings → Island → Daily Life; the local
 calorie log is stored at `~/.local/share/isle/calories.json`. Food logging is
 manual and does not estimate calories from meal names.
 
-This first MCP surface uses Isle's public D-Bus interfaces. It does not expose
-clipboard contents or the shell-only assistant control API.
+This current MCP surface uses Isle's public D-Bus interfaces. It does not
+expose clipboard/shelf contents yet; those remain part of the target coverage
+inventory. The shell-only assistant control API is an internal control
+interface, not an Isle user feature exposed by this MCP service.
