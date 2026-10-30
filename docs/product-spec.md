@@ -144,10 +144,11 @@ with the wheel or touchpad and never show a scrollbar.
 - Centre: the assistant's 26 px face in the chosen look. Its eyes follow the pointer over the face,
   and it blinks and glances every few seconds. Click or rest the pointer on it to open the assistant.
   While the assistant works in the background, its expression shows that state.
-- Outward from the clock, and outward from the date: the live statuses in priority order — focus
-  timer → screen recording → call → unseen notifications → music → weather — split across the
-  two sides by width, each taking whichever side is narrower so far, so both sides carry about
-  the same and the notch grows evenly. They widen the notch. Recording
+- At the notch's outer edges: the live statuses in priority order — focus timer → screen
+  recording → call → unseen notifications → music → weather — split across the two sides by
+  width, each taking whichever side is narrower so far, so both sides carry about the same and
+  the notch grows evenly; the highest priority fills the outermost slot, then inward. They widen
+  the notch. Recording
   shows its red dot and duration; a call shows its green phone and duration, plus a
   muted-microphone sign; music uses equaliser bars; focus uses its progress ring and remaining
   time; notifications show a bell and unread count. Paused music bars rest and dim; playing bars
