@@ -17,15 +17,15 @@ import * as Palette from './palette.js';
 import * as Playback from './playback.js';
 import {WeatherWatcher} from './weather.js';
 import {watchClock} from './wallClock.js';
-import {Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt, label} from './widgets.js';
+import {Art, Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt, label} from './widgets.js';
 
 /** The assistant at rest, in the centre. */
 const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
-    inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
+    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16, music: 18},
+    inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14, music: 16},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -93,7 +93,9 @@ export const CompactView = GObject.registerClass({
         this._timerStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
         this._timerStatus.add_child(this._ring);
         this._timerStatus.add_child(this._timerTime);
+        this._musicArt = new Art({size: SIZES.hanging.music, radius: 4});
         this._musicStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
+        this._musicStatus.add_child(this._musicArt);
         this._musicStatus.add_child(this._bars);
         this._notificationStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
         this._notificationStatus.add_child(this._notificationIcon);
@@ -229,7 +231,12 @@ export const CompactView = GObject.registerClass({
         // Gaps match `.isle-compact-status` (see `preferredWidth`).
         const gap = px(this._inBar ? 10 : 12);
         const widths = statuses.map(item => item.get_preferred_width(-1)[1] + gap);
-        const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
+        // The signature covers which statuses are on; the widths cover their sizes changing without
+        // the set changing (a ticking timer, a colder morning): both bring the sides out of level, so
+        // either re-spreads. Widths measured before St has laid the last text change out are close
+        // enough to keep the sides steady.
+        const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}` +
+            `:${widths.join(',')}`;
         if (signature === this._statusSignature)
             return;
         this._statusSignature = signature;
@@ -361,6 +368,7 @@ export const CompactView = GObject.registerClass({
         this._inBar = inBar;
         const size = SIZES[inBar ? 'inBar' : 'hanging'];
         this._ring.resize(size.ring);
+        this._musicArt.resize(size.music, 4);
         this._bars.maxHeight = size.bars;
         this._moon.icon_size = size.moon;
         this._callIcon.icon_size = this._micOff.icon_size = size.call;
@@ -410,6 +418,8 @@ export const CompactView = GObject.registerClass({
             this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
+        // The song's cover travels with the bars; the placeholder stands while there is none.
+        this._musicArt.setPath(this._isServiceDown || !hasTrack ? '' : nowPlaying.art_path);
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
