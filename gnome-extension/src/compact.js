@@ -217,21 +217,39 @@ export const CompactView = GObject.registerClass({
     }
 
     /**
-     * Alternates the live statuses between the two sides, starting beside the clock: the first
-     * status takes the slot beside the clock, the second the one beside the date, the third the
-     * next slot left of the clock, and so on, so both sides carry some and the notch grows evenly
-     * whatever is active.
+     * Splits the live statuses across the two sides by width, so both carry about the same and the
+     * notch grows evenly: each status in priority order takes whichever side is narrower so far
+     * (the left on a tie, keeping the highest priority statuses first). Clock-side and date-side
+     * slots fill outward from the clock and the date, so the clock and the date flank the assistant
+     * unmoved, whatever is active.
      */
     _spreadStatuses(statuses) {
-        const clockSide = statuses.filter((_item, index) => index % 2 === 0);
+        // Gaps match `.isle-compact-status` (see `preferredWidth`).
+        const gap = px(this._inBar ? 10 : 12);
+        const widths = statuses.map(item => item.get_preferred_width(-1)[1] + gap);
         const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
         if (signature === this._statusSignature)
             return;
         this._statusSignature = signature;
 
+        let leftWidth = 0;
+        let rightWidth = 0;
+        const left = [];
+        const right = [];
+        for (const [index, item] of statuses.entries()) {
+            const own = widths[index];
+            if (leftWidth <= rightWidth) {
+                left.push(item);
+                leftWidth += own;
+            } else {
+                right.push(item);
+                rightWidth += own;
+            }
+        }
+
         for (const item of this._statusItems) {
             item.visible = statuses.includes(item);
-            const side = clockSide.includes(item) ? this._leftStatuses : this._rightStatuses;
+            const side = left.includes(item) ? this._leftStatuses : this._rightStatuses;
             if (item.get_parent() === side)
                 continue;
             if (item.get_parent())
@@ -239,11 +257,10 @@ export const CompactView = GObject.registerClass({
             side.add_child(item);
         }
         // Clock side slots fill outward from the clock, date side slots outward from the date.
-        clockSide.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
-        statuses.filter((_item, index) => index % 2 === 1)
-            .forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
-        this._leftStatuses.visible = clockSide.length > 0;
-        this._rightStatuses.visible = statuses.length > clockSide.length;
+        left.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
+        right.forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
+        this._leftStatuses.visible = left.length > 0;
+        this._rightStatuses.visible = right.length > 0;
     }
 
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */

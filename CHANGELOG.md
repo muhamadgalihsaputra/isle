@@ -10,8 +10,8 @@ All notable changes to Isle are listed here. The format follows
 
 - The closed island keeps the assistant centred, with the clock just left of it and the date just
   right instead of in the corners. The live statuses (recording, a call, music, focus, unread
-  notifications) now alternate outward from the clock and the date, so a status never reads as a
-  second time beside the clock, and the notch grows evenly rather than crowding the assistant.
+  notifications) now fill outward from the clock and the date, split across the two sides by
+  width so no side is left bare and the notch grows evenly rather than crowding the assistant.
 
 ## [1.4.0] - 2026-10-27
 
