@@ -75,6 +75,12 @@ This uses Isle's default data directory; an XDG data-directory override moves
 the file with it.
 
 Hermes keeps its own identity, personality, memory, skills, and native tools.
+Isle does not replace them with its own persona: instead of "You are Isle…",
+Hermes is told only what Isle is (a notch on the user's desktop), the
+actions and tools it can reach through it, and how an answer is shaped
+(`crates/isle-daemon/src/assistant/mod.rs`, `isle_bridge`). Isle's
+Assistant Settings custom instructions are not sent to Hermes either;
+configure Hermes' persona in its own SOUL/BOOT files.
 Native Hermes tool calls run in the Hermes API server under Hermes' own tool
 and approval settings. Isle relays Hermes' API-side approval events: when a
 guarded tool asks (`approval.request` on the stream), Isle shows its existing

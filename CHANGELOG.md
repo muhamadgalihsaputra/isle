@@ -16,7 +16,9 @@ All notable changes to Isle are listed here. The format follows
   API key row, kept in ~/.config/isle/ai.env (mode 0600), overriding the local
   ~/.hermes/.env and environment. Empty endpoint means this computer's
   http://127.0.0.1:8642/v1, as before.
-
+- Hermes keeps its own personality: instead of being made into Isle ("You are Isle…"), it is
+  told only what Isle is, the desktop actions and tools reachable through it, and how an
+  answer is shaped. Its own persona, memory, skills and custom instructions stay Hermes'.
 ### Changed
 
 - The closed island keeps the assistant centred, with the clock just left of it and the date just
