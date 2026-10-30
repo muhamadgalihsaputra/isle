@@ -101,7 +101,7 @@ Homepage: https://github.com/zickrian/isle
 Description: $SUMMARY
  Isle turns the middle of the GNOME Shell top bar into a notch-style island: music
  with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
- charging and system alerts, and an optional voice assistant.
+ app usage, charging and system alerts, and an optional voice assistant.
  .
  Each user logs out and back in, then turns the extension on once: gnome-extensions enable $UUID
 EOF
@@ -133,7 +133,7 @@ Recommends: vulkan-loader
 %description
 Isle turns the middle of the GNOME Shell top bar into a notch-style island: music
 with synced lyrics, calls, a focus timer, reminders, a calendar, a file shelf,
-charging and system alerts, and an optional voice assistant.
+app usage, charging and system alerts, and an optional voice assistant.
 
 Each user logs out and back in, then turns the extension on once: gnome-extensions enable $UUID
 
