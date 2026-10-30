@@ -60,6 +60,9 @@ export const CompactView = GObject.registerClass({
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
         this._row = row;
         this.add_child(row);
+        // Two pads that share whatever room the row has: whatever the sides weigh, the pads take the
+        // same amount each, so the assistant sits in the middle of the notch whatever is on.
+        this._rowPad = new St.Widget({x_expand: true});
 
         this._left = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-clock-side', x_expand: false,
             y_align: Clutter.ActorAlign.CENTER});
@@ -165,9 +168,11 @@ export const CompactView = GObject.registerClass({
         });
         this._syncWeather();
 
+        row.add_child(this._rowPad);
         row.add_child(this._left);
         row.add_child(this._assistantButton);
         row.add_child(this._right);
+        row.add_child(new St.Widget({x_expand: true}));
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
             if (['nowPlaying', 'pomodoro'].includes(key))
@@ -218,6 +223,8 @@ export const CompactView = GObject.registerClass({
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * rightItems.length;
         const sideWidth = Math.max(px(size.side), leftWidth, rightWidth);
+        // Each side pads itself out to the same width, so the two pads at the row's ends share the
+        // same room and the assistant sits centred; the pads take up whatever the sides fall short.
         this._left.width = sideWidth;
         this._right.width = sideWidth;
         // Row padding, one row gap either side of the assistant.
