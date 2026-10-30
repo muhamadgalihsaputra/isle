@@ -166,7 +166,7 @@
 .isle-compact-clock-box { spacing: 8px; }
 .isle-compact-status { spacing: 12px; }
 .isle-compact-status-item { spacing: 8px; }
-.isle-compact-rest-date { font-size: 10px; font-weight: 500; color: rgba(255, 255, 255, 0.48); }
+.isle-compact-rest-date { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); letter-spacing: -0.1px; }
 .isle-compact-status-time { font-size: 13px; font-weight: 600; font-feature-settings: "tnum"; }
 .isle-compact-recording-time { color: #ff453a; }
 .isle-compact-notification-count { color: #ff453a; font-size: 11px; font-weight: 700; }
@@ -179,7 +179,7 @@
 .isle-compact-in-bar .isle-compact-clock-side { spacing: 10px; }
 .isle-compact-in-bar .isle-compact-status { spacing: 10px; }
 .isle-compact-in-bar .isle-compact-clock { font-size: 14px; letter-spacing: -0.1px; }
-.isle-compact-in-bar .isle-compact-rest-date { font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.9); }
+.isle-compact-in-bar .isle-compact-rest-date { font-size: 13px; font-weight: 600; color: rgba(255, 255, 255, 0.9); letter-spacing: -0.1px; }
 .isle-compact-in-bar .isle-compact-status-time { font-size: 12px; }
 .isle-compact-in-bar .isle-compact-assistant-button { width: 30px; height: 30px; padding: 1px; }
 
