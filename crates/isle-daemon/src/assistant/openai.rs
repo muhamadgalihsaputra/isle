@@ -57,6 +57,7 @@ impl Client {
             })
             .filter(|key| !key.is_empty())
             .or_else(|| std::env::var("HERMES_API_KEY").ok())
+            .or_else(|| config_value("HERMES_API_KEY"))
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Hermes API key not found; enable the Hermes API server and set API_SERVER_KEY"
@@ -64,7 +65,9 @@ impl Client {
             })?;
         Ok(Self {
             base_url: std::env::var("ISLE_HERMES_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:8642/v1".into()),
+                .ok()
+                .or_else(|| config_value("ISLE_HERMES_URL"))
+                .unwrap_or_else(|| "http://127.0.0.1:8642/v1".into()),
             api_key: key,
             model: model.to_owned(),
             instructions: instructions.to_owned(),
@@ -83,6 +86,7 @@ impl Client {
                 })
             })
         }) || std::env::var_os("HERMES_API_KEY").is_some()
+            || config_value("HERMES_API_KEY").is_some()
     }
 
     pub fn byok(model: &str, instructions: &str) -> anyhow::Result<Self> {

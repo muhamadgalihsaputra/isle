@@ -12,6 +12,10 @@ All notable changes to Isle are listed here. The format follows
   Hermes wants to run but guards asks through Isle's own Allow / Deny alert: the answer goes
   back to Hermes (once, always where Hermes offers it, or denied). An unanswered or dismissed
   alert denies, so a Hermes tool never waits past Isle.
+- Assistant Settings can point Hermes elsewhere (a VPS on a tailnet): a Hermes endpoint and
+  API key row, kept in ~/.config/isle/ai.env (mode 0600), overriding the local
+  ~/.hermes/.env and environment. Empty endpoint means this computer's
+  http://127.0.0.1:8642/v1, as before.
 
 ### Changed
 

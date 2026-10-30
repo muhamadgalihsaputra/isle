@@ -291,7 +291,26 @@ export default class IslePreferences extends ExtensionPreferences {
                 GLib.source_remove(saveInstructions);
         });
 
-        const options = [provider, model, modelId, customInstructions];
+        // Hermes usually lives on this computer; these two let it live elsewhere instead
+        // (a VPS on a tailnet): they override the endpoint and key with what ~/.config/isle/ai.env
+        // holds, the same private file the OpenAI-compatible API uses.
+        const hermesUrl = new Adw.EntryRow({title: 'Hermes endpoint', text: aiEnvValue('ISLE_HERMES_URL'),
+            subtitle: 'Empty for this computer (http://127.0.0.1:8642/v1); e.g. http://100.64.0.5:8642/v1'});
+        const hermesKey = new Adw.EntryRow({title: 'Hermes API key', text: aiEnvValue('HERMES_API_KEY'),
+            subtitle: 'Only for a Hermes elsewhere; on this computer Hermes owns its key'});
+        for (const [row, name] of [[hermesUrl, 'ISLE_HERMES_URL'], [hermesKey, 'HERMES_API_KEY']]) {
+            row.visible = false;
+            row.connect('changed', () => saveAiEnvValue(name, row.text.trim()));
+        }
+        const syncHermes = () => {
+            const hermes = settings.get_string('voice-provider') === 'hermes';
+            hermesUrl.visible = hermes;
+            hermesKey.visible = hermes;
+        };
+        settings.connect('changed::voice-provider', syncHermes);
+        syncHermes();
+
+        const options = [provider, model, modelId, hermesUrl, hermesKey, customInstructions];
         options.push(choiceRow(settings, 'voice-speech-model', 'Speech recognition', 'Bigger is more accurate, and slower; downloaded once', [
             ['tiny', 'Tiny (44 MB)'],
             ['base', 'Base (82 MB)'],
@@ -1061,7 +1080,8 @@ const AI_PROVIDERS = [
     {id: 'grok', name: 'Grok', planName: 'Grok', command: 'grok', modelKey: 'voice-grok-model',
         about: 'what Grok answers with, quickly'},
     {id: 'hermes', name: 'Hermes Agent', command: '', modelKey: 'voice-hermes-model',
-        available: () => signedIn('hermes'), about: 'Hermes keeps its own personality and memory; Isle adds its desktop instructions',
+        available: () => signedIn('hermes'),
+        about: 'Hermes keeps its own personality and memory; Isle adds its desktop instructions. A Hermes elsewhere: its endpoint and key below',
         models: () => [['', 'Hermes default'], ...apiModels('hermes')]},
     {id: 'openai-compatible', name: 'OpenAI-compatible API', command: '', modelKey: 'voice-openai-model',
         available: () => signedIn('openai-compatible'), about: 'Store endpoint and API key in ~/.config/isle/ai.env (chmod 600)',
@@ -1202,7 +1222,7 @@ function signedIn(id) {
     case 'grok':
         return exists(grokHome(), 'auth.json') || env('XAI_API_KEY');
     case 'hermes':
-        if (env('HERMES_API_KEY'))
+        if (env('HERMES_API_KEY') || aiEnvValue('HERMES_API_KEY'))
             return true;
         try {
             const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([GLib.get_home_dir(), '.hermes', '.env']));
@@ -1282,6 +1302,40 @@ function usageProviders() {
 }
 
 /** A drop-down for a string key with `choices`: [[value, label], …]. */
+/** The value of `name` in ~/.config/isle/ai.env, the private file isled reads for API endpoints and keys. */
+function aiEnvValue(name) {
+    try {
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([GLib.get_user_config_dir(), 'isle', 'ai.env']));
+        const found = new TextDecoder().decode(bytes)
+            .split('\n').find(line => line.trim().startsWith(`${name}=`));
+        return found ? found.trim().slice(name.length + 1) : '';
+    } catch {
+        return '';
+    }
+}
+
+/** Keeps `name` in ~/.config/isle/ai.env (only this row's value; the rest stays as it is), mode 0600. */
+function saveAiEnvValue(name, value) {
+    const dir = GLib.build_filenamev([GLib.get_user_config_dir(), 'isle']);
+    const path = GLib.build_filenamev([dir, 'ai.env']);
+    const kept = [];
+    try {
+        const [, bytes] = GLib.file_get_contents(path);
+        for (const line of new TextDecoder().decode(bytes).split('\n'))
+            if (line.trim() && !line.trim().startsWith(`${name}=`))
+                kept.push(line.trimEnd());
+    } catch {
+        // No file yet: this makes it, private.
+    }
+    if (value)
+        kept.push(`${name}=${value}`);
+    if (!kept.length && !value)
+        return;  // Nothing to keep and nothing to add: no empty file.
+    GLib.mkdir_with_parents(dir, 0o700);
+    GLib.file_set_contents(path, kept.length ? kept.join('\n') + '\n' : '');
+    GLib.chmod(path, 0o600);
+}
+
 function choiceRow(settings, key, title, subtitle, choices) {
     const row = new Adw.ComboRow({
         title,

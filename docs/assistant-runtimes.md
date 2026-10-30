@@ -49,10 +49,13 @@ and running its gateway before Isle can send it a request.
 
 Isle reads `API_SERVER_KEY` from `~/.hermes/.env` (or `HERMES_API_KEY` from
 the `isled` environment) and connects to
-`http://127.0.0.1:8642/v1`. The optional `ISLE_HERMES_URL` environment
-variable changes that URL for a gateway using a different local port; it is
-not an Assistant Settings field. Isle has no separate Hermes key or endpoint
-form because Hermes owns provider setup and credentials.
+`http://127.0.0.1:8642/v1`. For a Hermes somewhere else (a VPS on a
+tailnet, for example), Assistant Settings has a Hermes endpoint and API key
+row: what they hold is kept in `~/.config/isle/ai.env` (the same private file
+the OpenAI-compatible API uses) as `ISLE_HERMES_URL` and `HERMES_API_KEY`,
+and overrides the local file and the environment. Keep such a Hermes on a
+private network (Tailscale, SSH tunnel) or behind TLS: its API exposes its
+full toolset, including the terminal of the machine it runs on.
 
 `isled --doctor` reports Hermes as configured when it finds the API key. That
 check does not verify that the gateway is currently reachable. If Isle reports
