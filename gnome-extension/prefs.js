@@ -296,10 +296,21 @@ export default class IslePreferences extends ExtensionPreferences {
         // holds, the same private file the OpenAI-compatible API uses.
         const hermesUrl = new Adw.EntryRow({title: 'Hermes endpoint (empty = http://127.0.0.1:8642/v1)',
             text: aiEnvValue('ISLE_HERMES_URL')});
-        // A password row keeps the key off the screen (its eye shows it while held); the file it
-        // saves to stays the private one isled reads.
+        // A password row keeps the key off the screen; its eye toggle shows it while held. The peek
+        // icon is PasswordEntryRow's own (libadwaita 1.2); on older ones a plain eye button does it.
         const hermesKey = new Adw.PasswordEntryRow({title: 'Hermes API key (only for a Hermes elsewhere)',
-            text: aiEnvValue('HERMES_API_KEY'), show_peek_icon: true});
+            text: aiEnvValue('HERMES_API_KEY')});
+        if (typeof hermesKey.show_peek_icon === 'boolean') {
+            hermesKey.show_peek_icon = true;
+        } else {
+            const eye = new Gtk.ToggleButton({icon_name: 'eye-open-negative-1-symbolic', valign: Gtk.Align.CENTER,
+                tooltip_text: 'Show the key'});
+            eye.connect('toggled', () => {
+                hermesKey.visibility = eye.active;
+                eye.icon_name = eye.active ? 'eye-close-negative-1-symbolic' : 'eye-open-negative-1-symbolic';
+            });
+            hermesKey.add_suffix(eye);
+        }
         for (const [row, name] of [[hermesUrl, 'ISLE_HERMES_URL'], [hermesKey, 'HERMES_API_KEY']]) {
             row.visible = false;
             row.connect('changed', () => saveAiEnvValue(name, row.text.trim()));
