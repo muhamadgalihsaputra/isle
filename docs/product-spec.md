@@ -30,7 +30,7 @@ sizes are logical pixels.
 
 | Presentation | Size (w × h) | Corner | Shoulder | Content |
 |---|---|---|---|---|
-| Compact | 210 × P; expands to fit statuses | 10 | 7 | Clock left · assistant centre · live status right |
+| Compact | 210 × P; expands to fit statuses | 10 | 7 | Live statuses left · clock and date beside the assistant |
 | Compact, hanging | 216 × (P + 30); expands to fit statuses | 16 | 10 | As above |
 | Peek (alert) | fits its content, 220–380 wide × (P + 56); 62 high off a black bar | 22 | 13 | Badge · title/subtitle · value, level bar or button, centred |
 | Expanded | 600 minimum × (P + 164); grows for the header or lyrics | 32 | 22 | Three-zone header · page |
@@ -128,18 +128,19 @@ with the wheel or touchpad and never show a scrollbar.
 - Where it is: on the main display, in its top bar; or (Settings) on the display of the window in use,
   moving there once closed. A display without the top bar has the island hang from its top edge, with
   a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
-- Left: the clock (follows GNOME's 12/24-hour setting), with the Do Not Disturb moon before it.
+- The two rest items flank the assistant: the clock (follows GNOME's 12/24-hour setting, with the
+  Do Not Disturb moon before it) just left of it, the date just right.
 - Centre: the assistant's 26 px face in the chosen look. Its eyes follow the pointer over the face,
   and it blinks and glances every few seconds. Click or rest the pointer on it to open the assistant.
   While the assistant works in the background, its expression shows that state.
-- Right: all active statuses in one row, ordered as service warning → screen recording →
-  call → music → focus timer → unseen notifications. The notch grows symmetrically to fit them. Recording shows its red dot and duration; a call
+- Left of the clock: all active statuses in one row, ordered as service warning → screen recording →
+  call → music → focus timer → unseen notifications. They widen the notch to the left. Recording shows its red dot and duration; a call
   shows its green phone and duration, plus a muted-microphone sign; music uses equaliser bars; focus
   uses its progress ring and remaining time; notifications show a bell and unread count. Paused music
   bars rest and dim; playing bars move only while the closed
   island is on screen, and rest after a minute without input.
 - Far right: privacy dots: green camera, orange microphone, blue screen sharing. They stay visible
-  beside the right-hand status (the island widens to fit them).
+  beside the date (the island widens to fit them).
 
 ## 5. Pages
 

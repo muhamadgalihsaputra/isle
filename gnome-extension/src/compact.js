@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 zickrian
 
-// The resting island: clock left, the assistant's attentive face in the middle, and
-// the most useful live status on the right. Disabled pages do not leave their status behind.
+// The resting island: live statuses on the left, the clock and the rest date beside the
+// assistant's attentive face in the middle. Disabled pages do not leave their status behind.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';

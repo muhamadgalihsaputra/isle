@@ -6,6 +6,12 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The closed island keeps the clock and the date beside the assistant: the two rest items no longer
+  sit in the corners, and the live statuses (recording, a call, music, focus, unread notifications)
+  appear on the left, widening the notch instead of crowding the assistant.
+
 ## [1.4.0] - 2026-10-27
 
 ### Added
