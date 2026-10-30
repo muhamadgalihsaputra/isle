@@ -94,8 +94,9 @@ export const CompactView = GObject.registerClass({
         this._timerStatus.add_child(this._ring);
         this._timerStatus.add_child(this._timerTime);
         this._musicArt = new Art({size: SIZES.hanging.music, radius: 4});
+        // The song's two signs live in opposite corners, as the island's own music page splits them:
+        // the cover at the notch's left edge, the dancing bars at its right edge.
         this._musicStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
-        this._musicStatus.add_child(this._musicArt);
         this._musicStatus.add_child(this._bars);
         this._notificationStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER});
         this._notificationStatus.add_child(this._notificationIcon);
@@ -142,6 +143,7 @@ export const CompactView = GObject.registerClass({
         for (const item of this._statusItems)
             this._leftStatuses.add_child(item);
         this._leftSpacer = new St.Widget({x_expand: true});
+        this._left.add_child(this._musicArt);
         this._left.add_child(this._leftStatuses);
         this._left.add_child(this._leftSpacer);
         this._left.add_child(this._clockBox);
@@ -204,8 +206,12 @@ export const CompactView = GObject.registerClass({
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
         // Gaps match `.isle-compact-clock-side` and `.isle-compact-status`.
         const gap = px(this._inBar ? 10 : 12);
-        const statuses = this._leftStatuses.visible ? this._leftStatuses.get_preferred_width(-1)[1] : 0;
-        const leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap * (statuses ? 2 : 1) + statuses;
+        // Each of the art tile and the statuses box stands a gap from its neighbours, as the side's
+        // own spacing lays them out.
+        const leftItems = [this._musicArt, this._leftStatuses].filter(item => item.visible)
+            .map(item => item.get_preferred_width(-1)[1]);
+        const leftWidth = leftItems.reduce((total, width) => total + width + gap, 0) +
+            this._clockBox.get_preferred_width(-1)[1];
         // Both sides end flush at the assistant; each item stands a gap from its neighbours.
         // The right side also holds the spacer, which is why one gap per item measures the whole side.
         const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
@@ -431,7 +437,9 @@ export const CompactView = GObject.registerClass({
             this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
-        // The song's cover travels with the bars; the placeholder stands while there is none.
+        // The cover sits in the left corner while the song plays; the placeholder stands while a
+        // player sends no art.
+        this._musicArt.visible = !this._isServiceDown && hasTrack;
         this._musicArt.setPath(this._isServiceDown || !hasTrack ? '' : nowPlaying.art_path);
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
