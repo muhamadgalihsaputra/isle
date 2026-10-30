@@ -24,7 +24,7 @@ const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
     inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
@@ -150,6 +150,9 @@ export const CompactView = GObject.registerClass({
         this._right.add_child(this._rightStatuses);
         this._right.add_child(this._rightSpacer);
         this._right.add_child(this._privacyDots);
+        // The clock and the date sit beside the assistant and never move; the live statuses stay
+        // outward from them, so nothing crowds the centre or reads as a second time.
+
 
         this._weather = new WeatherWatcher(settings);
         this._weatherChanged = this._weather.connect('changed', () => {
@@ -201,6 +204,7 @@ export const CompactView = GObject.registerClass({
         const gap = px(this._inBar ? 10 : 12);
         const statuses = this._leftStatuses.visible ? this._leftStatuses.get_preferred_width(-1)[1] : 0;
         const leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap * (statuses ? 2 : 1) + statuses;
+        // Both sides end flush at the assistant; each item stands a gap from its neighbours.
         // The right side also holds the spacer, which is why one gap per item measures the whole side.
         const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
@@ -213,33 +217,50 @@ export const CompactView = GObject.registerClass({
     }
 
     /**
-     * Fills the free slots nearest the clock and the date first, alternating sides: the first status
-     * takes the slot beside the clock, the second the one beside the date, the third the next slot
-     * left of the clock, and so on, so the row stays even whatever is active.
+     * Splits the live statuses across the two sides by width, so both carry about the same and the
+     * notch grows evenly: each status in priority order takes whichever side is narrower so far
+     * (the left on a tie, keeping the highest priority statuses first). Clock-side and date-side
+     * slots fill outward from the clock and the date, so the clock and the date flank the assistant
+     * unmoved, whatever is active.
      */
     _spreadStatuses(statuses) {
-        const clockSide = statuses.filter((_item, index) => index % 2 === 0);
+        // Gaps match `.isle-compact-status` (see `preferredWidth`).
+        const gap = px(this._inBar ? 10 : 12);
+        const widths = statuses.map(item => item.get_preferred_width(-1)[1] + gap);
         const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
         if (signature === this._statusSignature)
             return;
         this._statusSignature = signature;
 
+        let leftWidth = 0;
+        let rightWidth = 0;
+        const left = [];
+        const right = [];
+        for (const [index, item] of statuses.entries()) {
+            const own = widths[index];
+            if (leftWidth <= rightWidth) {
+                left.push(item);
+                leftWidth += own;
+            } else {
+                right.push(item);
+                rightWidth += own;
+            }
+        }
+
         for (const item of this._statusItems) {
             item.visible = statuses.includes(item);
-            const side = clockSide.includes(item) ? this._leftStatuses : this._rightStatuses;
+            const side = left.includes(item) ? this._leftStatuses : this._rightStatuses;
             if (item.get_parent() === side)
                 continue;
             if (item.get_parent())
                 item.get_parent().remove_child(item);
             side.add_child(item);
         }
-        // The slot nearest the clock is the box's last child, so the left side runs opposite.
-        clockSide.forEach((item, index) =>
-            this._leftStatuses.set_child_at_index(item, clockSide.length - 1 - index));
-        statuses.filter((_item, index) => index % 2 === 1)
-            .forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
-        this._leftStatuses.visible = clockSide.length > 0;
-        this._rightStatuses.visible = statuses.length > clockSide.length;
+        // Clock side slots fill outward from the clock, date side slots outward from the date.
+        left.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
+        right.forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
+        this._leftStatuses.visible = left.length > 0;
+        this._rightStatuses.visible = right.length > 0;
     }
 
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */

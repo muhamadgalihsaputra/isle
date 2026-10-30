@@ -134,9 +134,9 @@ with the wheel or touchpad and never show a scrollbar.
   and it blinks and glances every few seconds. Click or rest the pointer on it to open the assistant.
   While the assistant works in the background, its expression shows that state.
 - Outward from the clock, and outward from the date: the live statuses in priority order — focus
-  timer → screen recording → call → unseen notifications → music → weather — fill the free slots
-  nearest the clock and the date first, alternating sides as they fill, so both sides carry some
-  and the notch stays even. They widen the notch. Recording
+  timer → screen recording → call → unseen notifications → music → weather — split across the
+  two sides by width, each taking whichever side is narrower so far, so both sides carry about
+  the same and the notch grows evenly. They widen the notch. Recording
   shows its red dot and duration; a call shows its green phone and duration, plus a
   muted-microphone sign; music uses equaliser bars; focus uses its progress ring and remaining
   time; notifications show a bell and unread count. Paused music bars rest and dim; playing bars
