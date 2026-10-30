@@ -432,7 +432,7 @@ export class Controller {
             () => page('./pages/timer.js', 'TimerPage', [this._daemon, size]),
             () => page('./pages/tasks.js', 'TasksPage', [this._daemon, size]),
             () => page('./pages/shelf.js', 'ShelfPage', [this._daemon, this._clipboard, this._settings, size]),
-            () => page('./pages/calendar.js', 'CalendarPage', [this._daemon, size]),
+            () => page('./pages/calendar.js', 'CalendarPage', [this._daemon, this._settings, size]),
             () => page('./pages/calories.js', 'CaloriesPage', [this._daemon, this._settings, size]),
             () => page('./pages/water.js', 'WaterPage', [this._daemon, this._settings, size]),
             () => page('./pages/prayer.js', 'PrayerPage', [this._daemon, size]),
