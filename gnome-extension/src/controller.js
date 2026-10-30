@@ -327,7 +327,6 @@ export class Controller {
         this._shelfHelper = new ShelfHelper(this._island, this._shelf);
         for (const view of [...this._peeks, this._expanded, this._voice])
             this._island.addView(view);
-        Main.layoutManager.addChrome(this._island, {trackFullscreen: true});
         // GNOME Shell shutting down takes the island with the stage, Isle still on, and GNOME 51 runs on a
         // moment after: nothing of Isle's may run on it then.
         this._island.connect('destroy', () => {
