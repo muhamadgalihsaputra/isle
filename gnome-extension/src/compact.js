@@ -140,18 +140,18 @@ export const CompactView = GObject.registerClass({
         for (const item of this._statusItems)
             this._leftStatuses.add_child(item);
         this._leftSpacer = new St.Widget({x_expand: true});
-        this._left.add_child(this._leftSpacer);
         this._left.add_child(this._leftStatuses);
+        this._left.add_child(this._leftSpacer);
         this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._rightSpacer = new St.Widget({x_expand: true});
         this._right.add_child(this._restDate);
-        this._right.add_child(this._rightStatuses);
         this._right.add_child(this._rightSpacer);
+        this._right.add_child(this._rightStatuses);
         this._right.add_child(this._privacyDots);
-        // The clock and the date sit beside the assistant and never move; the live statuses stay
-        // outward from them, so nothing crowds the centre or reads as a second time.
+        // The clock and the date sit beside the assistant and never move; the live statuses rest
+        // at the notch's outer edges, so nothing crowds the centre or reads as a second time.
 
 
         this._weather = new WeatherWatcher(settings);
@@ -256,7 +256,7 @@ export const CompactView = GObject.registerClass({
                 item.get_parent().remove_child(item);
             side.add_child(item);
         }
-        // Clock side slots fill outward from the clock, date side slots outward from the date.
+        // The outermost slot fills first, then inward, on both sides.
         left.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
         right.forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
         this._leftStatuses.visible = left.length > 0;
