@@ -256,6 +256,12 @@ pub trait Ask {
         activity: &UnboundedSender<String>,
         draft: &UnboundedSender<String>,
     ) -> anyhow::Result<Answer>;
+
+    /// Whether it may ask the user to approve one of its own tool calls while answering; such an
+    /// answer may wait as long as the approval does (see `APPROVAL`), not just `ASK_TIMEOUT`.
+    fn asks_approvals(&self) -> bool {
+        false
+    }
 }
 
 impl Ask for Brain {
@@ -268,6 +274,13 @@ impl Ask for Brain {
     ) -> anyhow::Result<Answer> {
         Brain::ask(self, prompt, Some(activity), Some(draft)).await
     }
+
+    /// Hermes and OMP route their native-tool approvals through the island's Allow / Deny, which
+    /// the user may answer slowly.
+    fn asks_approvals(&self) -> bool {
+        matches!(self.provider(), super::brain::Provider::Hermes)
+            || matches!(self, Brain::Omp(_))
+    }
 }
 
 /// Where an answer goes as it is written (see `Brain::ask`), the steps it takes, and the command card.
@@ -278,9 +291,10 @@ pub struct Out<'a> {
     pub cards: &'a UnboundedSender<Value>,
 }
 
-/// Asks once within `ASK_TIMEOUT`, and strips any `spawn` or `stop` the AI wrote itself.
+/// Asks once within its time (see `Ask::asks_approvals`), and strips any `spawn` or `stop` the AI wrote itself.
 async fn ask_in_time(brain: &mut impl Ask, prompt: &str, out: &Out<'_>) -> anyhow::Result<Answer> {
-    let mut answer = tokio::time::timeout(ASK_TIMEOUT, brain.ask(prompt, out.activity, out.draft))
+    let limit = if brain.asks_approvals() { APPROVAL } else { ASK_TIMEOUT };
+    let mut answer = tokio::time::timeout(limit, brain.ask(prompt, out.activity, out.draft))
         .await
         .map_err(|_| anyhow::Error::new(TooLong))??;
     // What starts or stops a command is isled's to say (see `run_command`), never the AI's.

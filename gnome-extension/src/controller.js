@@ -910,7 +910,7 @@ export class Controller {
 
     /** Whether alerts are on for `provider`. Grok runs Claude's hooks, so it follows Claude's switch. */
     _alertsOn(provider) {
-        if (provider === 'omp')
+        if (provider === 'omp' || provider === 'hermes')
             return true;
         return this._settings.get_boolean(`agent-alerts-${provider === 'grok' ? 'claude' : provider}`);
     }
@@ -2292,13 +2292,14 @@ export class Controller {
                 this._askedAt.delete(key);
         }
         this._askedAt.set(`${request.provider}:${request.session}`, now);
-        const omp = request.provider === 'omp';
-        const pass = () => this._daemon.call('agents', 'Resolve', request.id, omp ? 'deny' : '');
+        // OMP and Hermes ask from inside the assistant: no window of their own to pass the ask to.
+        const inside = request.provider === 'omp' || request.provider === 'hermes';
+        const pass = () => this._daemon.call('agents', 'Resolve', request.id, inside ? 'deny' : '');
         if (!this._alertsOn(request.provider) || this._notifications.dnd ||
             !this._island.visible)
             return pass();
-        const window = omp ? null : this._agentWindow(request);
-        if (!omp && window && window === global.display.focus_window)
+        const window = inside ? null : this._agentWindow(request);
+        if (!inside && window && window === global.display.focus_window)
             return pass();
         const alert = Alerts.agentAsks(request, this._botLook,
             answer => this._daemon.call('agents', 'Resolve', request.id, answer));

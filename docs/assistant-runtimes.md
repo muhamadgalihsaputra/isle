@@ -73,13 +73,15 @@ the file with it.
 
 Hermes keeps its own identity, personality, memory, skills, and native tools.
 Native Hermes tool calls run in the Hermes API server under Hermes' own tool
-and approval settings. The current Isle adapter does not process API-side
-native-tool approval requests or turn them into Isle Allow / Deny alerts;
-configure and verify those permissions in Hermes. Isle's desktop-action
-approval does not cover them. Isle also currently consumes text deltas only,
-so Hermes tool-progress events are not shown as activity in Isle. Multi-step
-tool use, default-model handling, and cancellation still need live acceptance
-against the installed Hermes version.
+and approval settings. Isle relays Hermes' API-side approval events: when a
+guarded tool asks (`approval.request` on the stream), Isle shows its existing
+agent Allow / Deny alert and posts the answer to Hermes' runs API
+(`once`, `always` where Hermes offers it, or `deny`); an unanswered or
+dismissed alert denies. Isle shows Hermes' tool-progress events
+(`hermes.tool.progress`) as activity in the island. Isle's desktop-action
+approval covers the actions in Isle's own answer format; it does not change
+Hermes' tool configuration. Multi-step tool use, default-model handling, and
+cancellation still need live acceptance against the installed Hermes version.
 
 ## Oh My Pi inside Isle
 

@@ -6,6 +6,13 @@ All notable changes to Isle are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Hermes as the assistant's AI shows what its tools are doing in the island, and a command
+  Hermes wants to run but guards asks through Isle's own Allow / Deny alert: the answer goes
+  back to Hermes (once, always where Hermes offers it, or denied). An unanswered or dismissed
+  alert denies, so a Hermes tool never waits past Isle.
+
 ### Changed
 
 - The closed island keeps the assistant centred, with the clock just left of it and the date just

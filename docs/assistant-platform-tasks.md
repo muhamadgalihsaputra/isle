@@ -63,8 +63,11 @@ Acceptance: edits affect the next OMP session and persist across restarts.
   model, and Hermes default against the installed version.
 - [ ] Verify streaming multi-turn requests, Isle action approval/results,
   history persistence, cancellation, gateway restart, and error handling.
-- [ ] Decide and implement how Hermes-native tool approvals and progress should
-  appear in Isle; the current adapter does not relay them.
+- [x] Relay Hermes-native tool approvals and progress in Isle: tool progress
+  shows as activity, and `approval.request` frames go through Isle's existing
+  agent Allow / Deny alert, answered back to Hermes' runs API.
+- [ ] Verify the Hermes approval relay in a live Isle UI: Allow, Deny,
+  dismissed alert, and a Hermes version that does not emit the events.
 - [ ] Keep Hermes' personality and durable memory under Hermes' control.
 
 Acceptance: Hermes completes multi-step requests in the Isle UI and routes
