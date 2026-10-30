@@ -247,17 +247,30 @@ export const CompactView = GObject.registerClass({
             rightWidth += item.get_preferred_width(-1)[1] + gap;
         const left = [];
         const right = [];
-        // The widest first, each onto the lighter side: a priority order taken one by one lets one
-        // wide chip strand the side that filled first, so the widest ones level the sides first and
-        // the rest slot into what is left; ties keep the higher priority on the left.
-        [...statuses.keys()].sort((a, b) => widths[b] - widths[a] || a - b)
-            .forEach(index => {
+        // What is on stays on its side (its chip keeps its place while another comes or goes:
+        // a status appearing would otherwise reshuffle them all); only the new ones choose, and of
+        // those the widest first, onto the lighter side, so the sides level whatever is active.
+        for (const [index, item] of statuses.entries()) {
+            const kept = this._leftStatuses.get_children().includes(item) ? left
+                : this._rightStatuses.get_children().includes(item) ? right : null;
+            if (kept === left) {
+                left.push(item);
+                leftWidth += widths[index];
+            } else if (kept === right) {
+                right.push(item);
+                rightWidth += widths[index];
+            }
+        }
+        statuses.filter(item => !left.includes(item) && !right.includes(item))
+            .map(item => [item, widths[statuses.indexOf(item)]])
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([item, own]) => {
                 const lighter = leftWidth <= rightWidth ? left : right;
-                lighter.push(statuses[index]);
+                lighter.push(item);
                 if (lighter === left)
-                    leftWidth += widths[index];
+                    leftWidth += own;
                 else
-                    rightWidth += widths[index];
+                    rightWidth += own;
             });
         // Back to priority order, for the slots' fill order below.
         left.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
