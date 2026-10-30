@@ -240,16 +240,21 @@ export const CompactView = GObject.registerClass({
             rightWidth += item.get_preferred_width(-1)[1] + gap;
         const left = [];
         const right = [];
-        for (const [index, item] of statuses.entries()) {
-            const own = widths[index];
-            if (Math.abs(leftWidth + own - rightWidth) <= Math.abs(leftWidth - (rightWidth + own))) {
-                left.push(item);
-                leftWidth += own;
-            } else {
-                right.push(item);
-                rightWidth += own;
-            }
-        }
+        // The widest first, each onto the lighter side: a priority order taken one by one lets one
+        // wide chip strand the side that filled first, so the widest ones level the sides first and
+        // the rest slot into what is left; ties keep the higher priority on the left.
+        [...statuses.keys()].sort((a, b) => widths[b] - widths[a] || a - b)
+            .forEach(index => {
+                const lighter = leftWidth <= rightWidth ? left : right;
+                lighter.push(statuses[index]);
+                if (lighter === left)
+                    leftWidth += widths[index];
+                else
+                    rightWidth += widths[index];
+            });
+        // Back to priority order, for the slots' fill order below.
+        left.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
+        right.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
 
         for (const item of this._statusItems) {
             item.visible = statuses.includes(item);

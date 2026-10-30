@@ -633,8 +633,20 @@ export const ExpandedView = GObject.registerClass({
         this._unwatchClock = null;
     }
 
-    /** Pages change by their tabs alone: a scroll no list or lyrics took goes no further. */
-    vfunc_scroll_event() {
+    /** Pages change by their tabs alone, or by a scroll over the island's own chrome: a scroll a
+     * list or lyrics took goes no further. */
+    vfunc_scroll_event(event) {
+        if (this._overList(event))
+            return Clutter.EVENT_PROPAGATE;
+        const direction = event.get_scroll_direction();
+        const delta = direction === Clutter.ScrollDirection.SMOOTH
+            ? event.get_scroll_delta()[1]
+            : direction === Clutter.ScrollDirection.DOWN ? 1 : direction === Clutter.ScrollDirection.UP ? -1 : 0;
+        if (delta === 0)
+            return Clutter.EVENT_STOP;
+        const index = this._nearestAvailable(this._index, delta > 0 ? 1 : -1);
+        if (index !== null && index !== this._index)
+            this.showPage(index);
         return Clutter.EVENT_STOP;
     }
 
