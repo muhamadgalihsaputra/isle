@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 zickrian
 
-// The resting island: live statuses on the left, the clock and the rest date beside the
-// assistant's attentive face in the middle. Disabled pages do not leave their status behind.
+// The resting island: live statuses spread either side of the clock and the rest date, which flank
+// the assistant's attentive face so it stays centred. Disabled pages do not leave their status behind.
 
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
@@ -24,8 +24,8 @@ const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-    hanging: {center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
-    inBar: {center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
+    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+    inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -34,6 +34,26 @@ const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
 export function timerColor(phase) {
     return phase === 'focus' || phase === 'idle' ? Palette.WHITE : Palette.GREEN;
+}
+
+
+/**
+ * Splits active statuses across the two sides of the row by width, so that both sides carry some:
+ * enough of the highest priority ones go left of the clock to hold half the total width, but never
+ * more than half of them. Returns how many.
+ */
+export function statusSplit(widths) {
+    const total = widths.reduce((sum, width) => sum + width, 0);
+    let left = 0;
+    let split = widths.length;
+    for (let i = 0; i < widths.length; i++) {
+        left += widths[i];
+        if (left * 2 >= total) {
+            split = i + 1;
+            break;
+        }
+    }
+    return Math.min(split, Math.ceil(widths.length / 2));
 }
 
 /** The closed island's contents; emits `width-changed` when it needs another width. */
@@ -131,20 +151,25 @@ export const CompactView = GObject.registerClass({
         this._openOnChanged = settings.connect('changed::open-on', () => this._scheduleAssistantHover());
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
-        this._leftStatusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
+        this._statusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
             this._notificationStatus, this._musicStatus, this._weatherStatus];
-        for (const item of this._leftStatusItems)
-            this._left.add_child(item);
+        this._leftStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
+            y_align: Clutter.ActorAlign.CENTER});
+        this._rightStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
+            y_align: Clutter.ActorAlign.CENTER});
+        for (const item of this._statusItems)
+            this._leftStatuses.add_child(item);
         this._leftSpacer = new St.Widget({x_expand: true});
+        this._left.add_child(this._leftStatuses);
         this._left.add_child(this._leftSpacer);
         this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._rightSpacer = new St.Widget({x_expand: true});
         this._right.add_child(this._restDate);
+        this._right.add_child(this._rightStatuses);
         this._right.add_child(this._rightSpacer);
         this._right.add_child(this._privacyDots);
-        this._rightStatusItems = [this._restDate, this._privacyDots];
 
         this._weather = new WeatherWatcher(settings);
         this._weatherChanged = this._weather.connect('changed', () => {
@@ -189,17 +214,49 @@ export const CompactView = GObject.registerClass({
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /** The island's natural width: live statuses on the left, the clock and date on either side of the assistant. */
+    /** The island's natural width: both sides take the wider one's room, so the assistant stays centred. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
-        const leftItems = [...this._leftStatusItems.filter(item => item.visible), this._clockBox];
-        const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
-            px(this._inBar ? 7 : 8) * leftItems.length;
-        const rightItems = this._rightStatusItems.filter(item => item.visible);
+        // Gaps match `.isle-compact-clock-side` and `.isle-compact-status`.
+        const gap = px(this._inBar ? 10 : 12);
+        const statuses = this._leftStatuses.visible ? this._leftStatuses.get_preferred_width(-1)[1] : 0;
+        const leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap * (statuses ? 2 : 1) + statuses;
+        // The right side also holds the spacer, which is why one gap per item measures the whole side.
+        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
-            px(8) * rightItems.length;
-        // Row padding and two gaps; the island is centered as a content block.
-        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + leftWidth + rightWidth + px(size.center));
+            gap * rightItems.length;
+        const sideWidth = Math.max(px(size.side), leftWidth, rightWidth);
+        this._left.width = sideWidth;
+        this._right.width = sideWidth;
+        // Row padding, one row gap either side of the assistant.
+        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + 2 * sideWidth + px(size.center));
+    }
+
+    /**
+     * Splits the live statuses across the two sides, the highest priority ones outward from the clock
+     * and the rest outward from the date.
+     */
+    _spreadStatuses(statuses) {
+        const split = statusSplit(statuses.map(item => item.get_preferred_width(-1)[1]));
+        const signature = `${split}:${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
+        if (signature === this._statusSignature)
+            return;
+        this._statusSignature = signature;
+
+        const clockSide = statuses.slice(0, split);
+        for (const item of this._statusItems) {
+            item.visible = statuses.includes(item);
+            const side = clockSide.includes(item) ? this._leftStatuses : this._rightStatuses;
+            if (item.get_parent() === side)
+                continue;
+            if (item.get_parent())
+                item.get_parent().remove_child(item);
+            side.add_child(item);
+        }
+        clockSide.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
+        statuses.slice(split).forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
+        this._leftStatuses.visible = clockSide.length > 0;
+        this._rightStatuses.visible = statuses.length > split;
     }
 
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */
@@ -329,9 +386,9 @@ export const CompactView = GObject.registerClass({
         const timerActive = Boolean(pomodoro && pomodoro.phase !== 'idle' && focusVisible);
         const recording = this._privacy.recording;
         const onCall = this._call.active;
-        // Show every live status in a stable priority order. The island grows to fit the row;
-        // service failure replaces the statuses with a single warning.
-        const leftStatuses = this._isServiceDown ? [this._serviceDown] : [
+        // Split every live status across both sides in a stable priority order, so neither side is left
+        // bare; a service failure replaces the statuses with a single warning.
+        const statuses = this._isServiceDown ? [this._serviceDown] : [
             timerActive && this._timerStatus,
             recording && this._recordingStatus,
             onCall && this._callStatus,
@@ -339,8 +396,7 @@ export const CompactView = GObject.registerClass({
             hasTrack && this._musicStatus,
             this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
-        for (const item of this._leftStatusItems)
-            item.visible = leftStatuses.includes(item);
+        this._spreadStatuses(statuses);
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;

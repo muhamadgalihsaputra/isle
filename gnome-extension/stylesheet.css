@@ -160,11 +160,11 @@
 /* ── Compact ──────────────────────────────────────────── */
 
 .isle-compact-row { padding: 0 16px; spacing: 12px; }
-.isle-compact-clock-side { spacing: 8px; }
+.isle-compact-clock-side { spacing: 12px; }
 
 .isle-compact-clock { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
 .isle-compact-clock-box { spacing: 8px; }
-.isle-compact-status { spacing: 8px; }
+.isle-compact-status { spacing: 12px; }
 .isle-compact-status-item { spacing: 8px; }
 .isle-compact-rest-date { font-size: 10px; font-weight: 500; color: rgba(255, 255, 255, 0.48); }
 .isle-compact-status-time { font-size: 13px; font-weight: 600; font-feature-settings: "tnum"; }
@@ -176,7 +176,8 @@
 
 /* Inside the top bar everything is sized like the bar's own text. */
 .isle-compact-in-bar .isle-compact-row { padding: 0 14px; spacing: 12px; }
-.isle-compact-in-bar .isle-compact-clock-side { spacing: 7px; }
+.isle-compact-in-bar .isle-compact-clock-side { spacing: 10px; }
+.isle-compact-in-bar .isle-compact-status { spacing: 10px; }
 .isle-compact-in-bar .isle-compact-clock { font-size: 14px; letter-spacing: -0.1px; }
 .isle-compact-in-bar .isle-compact-rest-date { font-size: 13px; font-weight: 400; color: rgba(255, 255, 255, 0.9); }
 .isle-compact-in-bar .isle-compact-status-time { font-size: 12px; }
