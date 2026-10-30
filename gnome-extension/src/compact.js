@@ -22,10 +22,10 @@ import {Bars, PrivacyDots, RecordingDot, Ring, icon, restsAt, label} from './wid
 /** The assistant at rest, in the centre. */
 const ASSISTANT_SIZE = 26;
 
-/** Sizes hanging below the top bar, and inside it with smaller text, in CSS pixels. */
+/** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-    hanging: {side: 72, center: 34, padding: 32, gap: 16, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
-    inBar: {side: 72, center: 30, padding: 28, gap: 16, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
+    hanging: {center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+    inBar: {center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -68,7 +68,6 @@ export const CompactView = GObject.registerClass({
         this._clockBox = new St.BoxLayout({style_class: 'isle-compact-clock-box', x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.CENTER});
         this._clockBox.add_child(this._moon);
         this._clockBox.add_child(this._clock);
-        this._left.add_child(this._clockBox);
 
         this._restDate = label('', 'isle-compact-rest-date', {y_align: Clutter.ActorAlign.CENTER});
 
@@ -106,7 +105,6 @@ export const CompactView = GObject.registerClass({
             visible: false});
         this._weatherStatus.add_child(this._weatherIcon);
         this._weatherStatus.add_child(this._weatherTemperature);
-        this._left.add_child(this._timerStatus);
 
         this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
         this._assistant.y_align = Clutter.ActorAlign.CENTER;
@@ -133,15 +131,20 @@ export const CompactView = GObject.registerClass({
         this._openOnChanged = settings.connect('changed::open-on', () => this._scheduleAssistantHover());
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
+        this._leftStatusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
+            this._notificationStatus, this._musicStatus, this._weatherStatus];
+        for (const item of this._leftStatusItems)
+            this._left.add_child(item);
+        this._leftSpacer = new St.Widget({x_expand: true});
+        this._left.add_child(this._leftSpacer);
+        this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
         this._rightSpacer = new St.Widget({x_expand: true});
+        this._right.add_child(this._restDate);
         this._right.add_child(this._rightSpacer);
-        this._leftStatusItems = [this._timerStatus];
-        this._rightStatusItems = [this._serviceDown, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._musicStatus, this._weatherStatus, this._restDate, this._privacyDots];
-        for (const item of this._rightStatusItems)
-            this._right.add_child(item);
+        this._right.add_child(this._privacyDots);
+        this._rightStatusItems = [this._restDate, this._privacyDots];
 
         this._weather = new WeatherWatcher(settings);
         this._weatherChanged = this._weather.connect('changed', () => {
@@ -186,22 +189,17 @@ export const CompactView = GObject.registerClass({
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /** The width the island should have to fit what is shown. */
+    /** The island's natural width: live statuses on the left, the clock and date on either side of the assistant. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
-        const leftItems = [this._clockBox, ...this._leftStatusItems.filter(item => item.visible)];
+        const leftItems = [...this._leftStatusItems.filter(item => item.visible), this._clockBox];
         const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
-            px(this._inBar ? 5 : 6) * Math.max(0, leftItems.length - 1);
-        // Each side stays equally wide, keeping the assistant centered; measure the right contents directly
-        // because `_right.width` is fixed to that balanced side width.
-        const visibleStatuses = this._rightStatusItems.filter(item => item.visible);
-        const spacing = px(6); // Matches `.isle-compact-status`; stays measurable before the view is staged.
-        const rightWidth = visibleStatuses.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
-            spacing * visibleStatuses.length;
-        const sideWidth = Math.max(px(size.side), leftWidth, rightWidth);
-        this._left.width = sideWidth;
-        this._right.width = sideWidth;
-        return Math.ceil(2 * sideWidth + px(size.center + size.gap + size.padding));
+            px(this._inBar ? 7 : 8) * leftItems.length;
+        const rightItems = this._rightStatusItems.filter(item => item.visible);
+        const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
+            px(8) * rightItems.length;
+        // Row padding and two gaps; the island is centered as a content block.
+        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + leftWidth + rightWidth + px(size.center));
     }
 
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */
@@ -333,10 +331,8 @@ export const CompactView = GObject.registerClass({
         const onCall = this._call.active;
         // Show every live status in a stable priority order. The island grows to fit the row;
         // service failure replaces the statuses with a single warning.
-        const leftStatuses = this._isServiceDown ? [] : [
+        const leftStatuses = this._isServiceDown ? [this._serviceDown] : [
             timerActive && this._timerStatus,
-        ].filter(Boolean);
-        const rightStatuses = this._isServiceDown ? [this._serviceDown] : [
             recording && this._recordingStatus,
             onCall && this._callStatus,
             this._unseen > 0 && this._notificationStatus,
@@ -345,9 +341,8 @@ export const CompactView = GObject.registerClass({
         ].filter(Boolean);
         for (const item of this._leftStatusItems)
             item.visible = leftStatuses.includes(item);
-        for (const item of this._rightStatusItems)
-            item.visible = item === this._privacyDots || rightStatuses.includes(item) ||
-                (item === this._restDate && !this._isServiceDown);
+        this._restDate.visible = !this._isServiceDown;
+        this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
         this._micOff.visible = onCall && this._call.muted;
 
