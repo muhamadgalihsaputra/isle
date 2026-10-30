@@ -24,7 +24,7 @@ const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
     inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
@@ -150,6 +150,9 @@ export const CompactView = GObject.registerClass({
         this._right.add_child(this._rightStatuses);
         this._right.add_child(this._rightSpacer);
         this._right.add_child(this._privacyDots);
+        // The clock and the date sit beside the assistant and never move; the live statuses stay
+        // outward from them, so nothing crowds the centre or reads as a second time.
+
 
         this._weather = new WeatherWatcher(settings);
         this._weatherChanged = this._weather.connect('changed', () => {
@@ -201,6 +204,7 @@ export const CompactView = GObject.registerClass({
         const gap = px(this._inBar ? 10 : 12);
         const statuses = this._leftStatuses.visible ? this._leftStatuses.get_preferred_width(-1)[1] : 0;
         const leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap * (statuses ? 2 : 1) + statuses;
+        // Both sides end flush at the assistant; each item stands a gap from its neighbours.
         // The right side also holds the spacer, which is why one gap per item measures the whole side.
         const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
@@ -213,9 +217,10 @@ export const CompactView = GObject.registerClass({
     }
 
     /**
-     * Fills the free slots nearest the clock and the date first, alternating sides: the first status
-     * takes the slot beside the clock, the second the one beside the date, the third the next slot
-     * left of the clock, and so on, so the row stays even whatever is active.
+     * Alternates the live statuses between the two sides, starting beside the clock: the first
+     * status takes the slot beside the clock, the second the one beside the date, the third the
+     * next slot left of the clock, and so on, so both sides carry some and the notch grows evenly
+     * whatever is active.
      */
     _spreadStatuses(statuses) {
         const clockSide = statuses.filter((_item, index) => index % 2 === 0);
@@ -233,9 +238,8 @@ export const CompactView = GObject.registerClass({
                 item.get_parent().remove_child(item);
             side.add_child(item);
         }
-        // The slot nearest the clock is the box's last child, so the left side runs opposite.
-        clockSide.forEach((item, index) =>
-            this._leftStatuses.set_child_at_index(item, clockSide.length - 1 - index));
+        // Clock side slots fill outward from the clock, date side slots outward from the date.
+        clockSide.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
         statuses.filter((_item, index) => index % 2 === 1)
             .forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
         this._leftStatuses.visible = clockSide.length > 0;
