@@ -296,8 +296,10 @@ export default class IslePreferences extends ExtensionPreferences {
         // holds, the same private file the OpenAI-compatible API uses.
         const hermesUrl = new Adw.EntryRow({title: 'Hermes endpoint (empty = http://127.0.0.1:8642/v1)',
             text: aiEnvValue('ISLE_HERMES_URL')});
-        const hermesKey = new Adw.EntryRow({title: 'Hermes API key (only for a Hermes elsewhere)',
-            text: aiEnvValue('HERMES_API_KEY')});
+        // A password row keeps the key off the screen (its eye shows it while held); the file it
+        // saves to stays the private one isled reads.
+        const hermesKey = new Adw.PasswordEntryRow({title: 'Hermes API key (only for a Hermes elsewhere)',
+            text: aiEnvValue('HERMES_API_KEY'), show_peek_icon: true});
         for (const [row, name] of [[hermesUrl, 'ISLE_HERMES_URL'], [hermesKey, 'HERMES_API_KEY']]) {
             row.visible = false;
             row.connect('changed', () => saveAiEnvValue(name, row.text.trim()));
