@@ -23,13 +23,18 @@ its user-facing flow is complete.
   confirms that it found a key; it does not ping the gateway. Hermes' API
   server grants access to its full toolset, so the documented setup keeps it
   on the default loopback address and uses a key.
-- The source streams only `choices[0].delta.content` and parses the final text
-  as Isle's answer/action format. Isle actions in that answer use Isle's own
-  permission path. Hermes-native tool execution runs in the Hermes gateway;
-  the adapter does not display API-side native-tool approval prompts or
-  tool-progress events in Isle. No live Hermes API round trip, multi-step
-  native-tool flow, Isle action, cancellation, or approval acceptance was
-  performed during this audit.
+- The source parses both text deltas and Hermes' named SSE events. `hermes.tool.progress`
+  frames with `status: running` are shown as activity in the island
+  ("Hermes is using …"), and `approval.request` frames for a flagged command
+  are relayed through Isle's existing agent Allow / Deny alert: the chosen
+  answer is posted back to `POST /v1/runs/{run_id}/approval` with Hermes'
+  choices (`once`, `always` where Hermes offers it, or `deny`); an unanswered,
+  dismissed, or failed alert denies, so a Hermes tool never waits past Isle.
+  The answer's own actions still use Isle's own permission path. Hermes-native
+  tool execution runs in the Hermes gateway under Hermes' tool settings; Isle
+  relays its approval requests but does not change them. No live Hermes API
+  round trip, multi-step native-tool flow, Isle action, cancellation, or
+  approval acceptance was performed during this audit.
 - OMP has an RPC adapter, streaming/progress handling, session persistence,
   and model-catalog lookup code. Current source keeps OMP's native tools,
   extensions, skills, and rules.

@@ -57,6 +57,7 @@ impl Client {
             })
             .filter(|key| !key.is_empty())
             .or_else(|| std::env::var("HERMES_API_KEY").ok())
+            .or_else(|| config_value("HERMES_API_KEY"))
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "Hermes API key not found; enable the Hermes API server and set API_SERVER_KEY"
@@ -64,7 +65,9 @@ impl Client {
             })?;
         Ok(Self {
             base_url: std::env::var("ISLE_HERMES_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:8642/v1".into()),
+                .ok()
+                .or_else(|| config_value("ISLE_HERMES_URL"))
+                .unwrap_or_else(|| "http://127.0.0.1:8642/v1".into()),
             api_key: key,
             model: model.to_owned(),
             instructions: instructions.to_owned(),
@@ -83,6 +86,7 @@ impl Client {
                 })
             })
         }) || std::env::var_os("HERMES_API_KEY").is_some()
+            || config_value("HERMES_API_KEY").is_some()
     }
 
     pub fn byok(model: &str, instructions: &str) -> anyhow::Result<Self> {
@@ -113,12 +117,16 @@ impl Client {
         // streaming reader checks, so the remote request stops.
         let cancel = Arc::new(AtomicBool::new(false));
         let _cancel_guard = CancelOnDrop(cancel.clone());
+        // The blocking reader answers Hermes' approval requests through the
+        // island's alert flow, which is async: it runs on this runtime.
+        let handle = tokio::runtime::Handle::current();
         let this = self.clone();
         let prompt = prompt.to_owned();
         let request_prompt = prompt.clone();
         let draft_tx = draft.cloned();
+        let activity_tx = activity.cloned();
         let content = tokio::task::spawn_blocking(move || {
-            this.stream_complete(&request_prompt, draft_tx.as_ref(), &cancel)
+            this.stream_complete(&request_prompt, activity_tx.as_ref(), draft_tx.as_ref(), &cancel, &handle)
         })
         .await??;
         self.history.push(json!({"role":"user","content":prompt}));
@@ -147,16 +155,94 @@ impl Client {
         }
     }
 
+    /// One named SSE event from the stream. Hermes tells the client what its
+    /// tools are doing (`hermes.tool.progress`) and asks for approval of a
+    /// flagged command (`approval.request`); other providers send none, and
+    /// unknown names are ignored. Runs inside the blocking reader, so the
+    /// approval waits on `handle` (see [`Self::send_hermes_approval`]).
+    fn on_event(
+        &self,
+        name: &str,
+        event: &Value,
+        activity: Option<&UnboundedSender<String>>,
+        handle: &tokio::runtime::Handle,
+    ) {
+        if !self.hermes_mode {
+            return;
+        }
+        match name {
+            "hermes.tool.progress" => {
+                if event["status"] != "running" {
+                    return;
+                }
+                let label = event["label"]
+                    .as_str()
+                    .filter(|label| !label.is_empty())
+                    .or_else(|| event["tool"].as_str())
+                    .unwrap_or("a tool");
+                if let Some(activity) = activity {
+                    activity.send(format!("Hermes is using {label}…")).ok();
+                }
+            }
+            "approval.request" => {
+                let request = hermes_approval(event);
+                // `decide` waits for the island's answer for as long as the
+                // alert does, and fails closed on its own when it must.
+                let decision = handle.block_on(crate::agents::hook::decide(&request));
+                let choice = match decision {
+                    Ok(answer) if matches!(answer.as_str(), "allow" | "always") => {
+                        if answer == "always" && event["allow_permanent"] != false {
+                            "always"
+                        } else {
+                            "once"
+                        }
+                    }
+                    _ => "deny",
+                };
+                if let Err(error) = self.send_hermes_approval(event, choice) {
+                    log::warn!("could not answer Hermes' approval request: {error:#}");
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Posts the user's `choice` for `event` back to Hermes, so its waiting
+    /// tool goes on (`once`), keeps for the session (`session`) or is refused
+    /// (`deny`).
+    fn send_hermes_approval(&self, event: &Value, choice: &str) -> anyhow::Result<()> {
+        let Some(run) = event["run_id"].as_str().filter(|id| !id.is_empty()) else {
+            bail!("approval request has no run id");
+        };
+        let base = self.base_url.trim_end_matches('/');
+        let root = base
+            .strip_suffix("/chat/completions")
+            .or_else(|| base.strip_suffix("/v1"))
+            .unwrap_or(base);
+        let url = format!("{root}/v1/runs/{run}/approval");
+        ureq::post(&url)
+            .header("Authorization", &format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .send_json(json!({"choice": choice}))
+            .map(|_| ())
+            .map_err(anyhow::Error::from)
+    }
+
     /// Streams one chat completion, forwarding each text delta to the draft
     /// view as it arrives. Runs on a blocking thread: the response body is a
     /// synchronous reader, and the caller's cancel flag is checked between
     /// lines. Returns the full accumulated text; parsing into an [`Answer`]
-    /// happens in [`Client::ask`] once complete.
+    /// happens in [`Client::ask`] once complete. Hermes' named events ride the
+    /// same stream: `hermes.tool.progress` becomes activity in the island, and
+    /// an `approval.request` is answered through the island's Allow / Deny
+    /// alert and sent back to Hermes' runs API (`handle` runs that waiting).
     fn stream_complete(
         &self,
         prompt: &str,
+        activity: Option<&UnboundedSender<String>>,
         draft: Option<&UnboundedSender<String>>,
         cancel: &AtomicBool,
+        handle: &tokio::runtime::Handle,
     ) -> anyhow::Result<String> {
         let base = self.base_url.trim_end_matches('/');
         let urls = if base.ends_with("/chat/completions") {
@@ -188,11 +274,22 @@ impl Client {
             {
                 Ok(response) => {
                     let reader = response.into_body().into_reader();
-                    let accumulated = accumulate_sse(BufReader::new(reader), cancel, |text| {
-                        if let Some(draft) = draft {
-                            draft.send(text.to_owned()).ok();
-                        }
-                    })?;
+                    let this = self.clone();
+                    let handle = handle.clone();
+                    let draft_tx = draft.cloned();
+                    let activity_tx = activity.cloned();
+                    let accumulated = accumulate_sse(
+                        BufReader::new(reader),
+                        cancel,
+                        move |text| {
+                            if let Some(draft) = draft_tx.as_ref() {
+                                draft.send(text.to_owned()).ok();
+                            }
+                        },
+                        move |name, event| {
+                            this.on_event(name, event, activity_tx.as_ref(), &handle);
+                        },
+                    )?;
                     if accumulated.trim().is_empty() {
                         bail!("API returned no answer");
                     }
@@ -246,16 +343,20 @@ impl Client {
 /// Reads one server-sent-events stream, appending each
 /// `choices[0].delta.content` to the accumulated text and calling `on_delta`
 /// with the whole text after every delta, so the draft view updates live.
-/// Stops at `data: [DONE]` or end of stream; a data line that is not valid
-/// JSON fails, so a provider that does not speak SSE surfaces at once
-/// instead of producing a garbled reply. `cancel` is checked between lines:
-/// a set flag aborts the read and drops the connection.
+/// Lines that name an event (`event: hermes.tool.progress`, `event:
+/// approval.request`) are handed to `on_event` instead. Stops at `data:
+/// [DONE]` or end of stream; a data line that is not valid JSON fails, so a
+/// provider that does not speak SSE surfaces at once instead of producing a
+/// garbled reply. `cancel` is checked between lines: a set flag aborts the
+/// read and drops the connection.
 fn accumulate_sse<R: BufRead>(
     reader: R,
     cancel: &AtomicBool,
     mut on_delta: impl FnMut(&str),
+    mut on_event: impl FnMut(&str, &Value),
 ) -> anyhow::Result<String> {
     let mut accumulated = String::new();
+    let mut event_name = String::new();
     for line in reader.lines() {
         if cancel.load(Ordering::SeqCst) {
             bail!("request cancelled");
@@ -263,6 +364,11 @@ fn accumulate_sse<R: BufRead>(
         let line = line.context("could not read streamed reply")?;
         let line = line.trim();
         if line.is_empty() || line.starts_with(':') {
+            event_name.clear();
+            continue;
+        }
+        if let Some(name) = line.strip_prefix("event:") {
+            event_name = name.trim().to_owned();
             continue;
         }
         let Some(data) = line.strip_prefix("data:") else {
@@ -274,6 +380,11 @@ fn accumulate_sse<R: BufRead>(
         }
         let event: Value = serde_json::from_str(data)
             .with_context(|| format!("streamed reply is not valid SSE JSON: {data}"))?;
+        if !event_name.is_empty() {
+            on_event(&event_name, &event);
+            event_name.clear();
+            continue;
+        }
         if let Some(delta) = event["choices"][0]["delta"]["content"].as_str() {
             if !delta.is_empty() {
                 accumulated.push_str(delta);
@@ -285,6 +396,19 @@ fn accumulate_sse<R: BufRead>(
         bail!("request cancelled");
     }
     Ok(accumulated)
+}
+
+/// Hermes' `approval.request` as the island asks it: the flagged command with
+/// its description, `always` only where Hermes offers to keep the rule.
+fn hermes_approval(event: &Value) -> crate::agents::Request {
+    crate::agents::Request {
+        provider: "hermes".into(),
+        session: event["session_id"].as_str().unwrap_or_default().into(),
+        tool: event["description"].as_str().unwrap_or("a command").into(),
+        input: event["command"].as_str().unwrap_or_default().into(),
+        always: event["allow_permanent"] != false,
+        ..crate::agents::Request::default()
+    }
 }
 
 /// Conversation history for one API provider, kept across daemon restarts so
@@ -386,9 +510,12 @@ mod tests {
     fn streamed(text: &str) -> String {
         let cancel = AtomicBool::new(false);
         let mut drafts = Vec::new();
-        let out = accumulate_sse(Cursor::new(text), &cancel, |draft| {
-            drafts.push(draft.to_owned());
-        })
+        let out = accumulate_sse(
+            Cursor::new(text),
+            &cancel,
+            |draft| drafts.push(draft.to_owned()),
+            |_, _| {},
+        )
         .unwrap();
         assert_eq!(drafts.last().map(String::as_str), Some(out.as_str()));
         out
@@ -418,7 +545,8 @@ mod tests {
     #[test]
     fn sse_bad_json_fails() {
         let cancel = AtomicBool::new(false);
-        let err = accumulate_sse(Cursor::new("data: not json\n"), &cancel, |_| {}).unwrap_err();
+        let err = accumulate_sse(Cursor::new("data: not json\n"), &cancel, |_| {}, |_, _| {})
+            .unwrap_err();
         assert!(err.to_string().contains("not valid SSE JSON"));
     }
 
@@ -429,8 +557,43 @@ mod tests {
             Cursor::new("data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n"),
             &cancel,
             |_| {},
+            |_, _| {},
         )
         .unwrap_err();
         assert_eq!(err.to_string(), "request cancelled");
+    }
+
+    #[test]
+    fn sse_named_events_reach_on_event_and_not_the_text() {
+        let cancel = AtomicBool::new(false);
+        let mut names = Vec::new();
+        let out = accumulate_sse(
+            Cursor::new(
+                "event: hermes.tool.progress\n\
+                 data: {\"tool\":\"terminal\",\"label\":\"Running ls\",\"status\":\"running\"}\n\n\
+                 data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\
+                 event: approval.request\n\
+                 data: {\"command\":\"rm -rf /\",\"run_id\":\"chatcmpl-1\"}\n\n",
+            ),
+            &cancel,
+            |_| {},
+            |name, _event| names.push(name.to_owned()),
+        )
+        .unwrap();
+        assert_eq!(out, "hi");
+        assert_eq!(names, ["hermes.tool.progress", "approval.request"]);
+    }
+
+    #[test]
+    fn hermes_approval_maps_fields() {
+        let request = hermes_approval(&serde_json::from_str(
+            "{\"command\":\"sudo apt install vlc\",\"description\":\"installs software\",\n             \"session_id\":\"chatcmpl-9\",\"allow_permanent\":true}",
+        )
+        .unwrap());
+        assert_eq!(request.provider, "hermes");
+        assert_eq!(request.tool, "installs software");
+        assert_eq!(request.input, "sudo apt install vlc");
+        assert_eq!(request.session, "chatcmpl-9");
+        assert!(request.always);
     }
 }

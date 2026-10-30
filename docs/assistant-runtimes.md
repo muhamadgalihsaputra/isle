@@ -49,10 +49,13 @@ and running its gateway before Isle can send it a request.
 
 Isle reads `API_SERVER_KEY` from `~/.hermes/.env` (or `HERMES_API_KEY` from
 the `isled` environment) and connects to
-`http://127.0.0.1:8642/v1`. The optional `ISLE_HERMES_URL` environment
-variable changes that URL for a gateway using a different local port; it is
-not an Assistant Settings field. Isle has no separate Hermes key or endpoint
-form because Hermes owns provider setup and credentials.
+`http://127.0.0.1:8642/v1`. For a Hermes somewhere else (a VPS on a
+tailnet, for example), Assistant Settings has a Hermes endpoint and API key
+row: what they hold is kept in `~/.config/isle/ai.env` (the same private file
+the OpenAI-compatible API uses) as `ISLE_HERMES_URL` and `HERMES_API_KEY`,
+and overrides the local file and the environment. Keep such a Hermes on a
+private network (Tailscale, SSH tunnel) or behind TLS: its API exposes its
+full toolset, including the terminal of the machine it runs on.
 
 `isled --doctor` reports Hermes as configured when it finds the API key. That
 check does not verify that the gateway is currently reachable. If Isle reports
@@ -73,13 +76,15 @@ the file with it.
 
 Hermes keeps its own identity, personality, memory, skills, and native tools.
 Native Hermes tool calls run in the Hermes API server under Hermes' own tool
-and approval settings. The current Isle adapter does not process API-side
-native-tool approval requests or turn them into Isle Allow / Deny alerts;
-configure and verify those permissions in Hermes. Isle's desktop-action
-approval does not cover them. Isle also currently consumes text deltas only,
-so Hermes tool-progress events are not shown as activity in Isle. Multi-step
-tool use, default-model handling, and cancellation still need live acceptance
-against the installed Hermes version.
+and approval settings. Isle relays Hermes' API-side approval events: when a
+guarded tool asks (`approval.request` on the stream), Isle shows its existing
+agent Allow / Deny alert and posts the answer to Hermes' runs API
+(`once`, `always` where Hermes offers it, or `deny`); an unanswered or
+dismissed alert denies. Isle shows Hermes' tool-progress events
+(`hermes.tool.progress`) as activity in the island. Isle's desktop-action
+approval covers the actions in Isle's own answer format; it does not change
+Hermes' tool configuration. Multi-step tool use, default-model handling, and
+cancellation still need live acceptance against the installed Hermes version.
 
 ## Oh My Pi inside Isle
 
