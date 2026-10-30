@@ -24,7 +24,7 @@ const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
+hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16},
     inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14},
 };
 /** The music bars' opacity while the song is paused. */
@@ -34,26 +34,6 @@ const RING_REFRESH_S = 5;
 /** The focus timer's colour: white while focusing, green on a break. */
 export function timerColor(phase) {
     return phase === 'focus' || phase === 'idle' ? Palette.WHITE : Palette.GREEN;
-}
-
-
-/**
- * Splits active statuses across the two sides of the row by width, so that both sides carry some:
- * enough of the highest priority ones go left of the clock to hold half the total width, but never
- * more than half of them. Returns how many.
- */
-export function statusSplit(widths) {
-    const total = widths.reduce((sum, width) => sum + width, 0);
-    let left = 0;
-    let split = widths.length;
-    for (let i = 0; i < widths.length; i++) {
-        left += widths[i];
-        if (left * 2 >= total) {
-            split = i + 1;
-            break;
-        }
-    }
-    return Math.min(split, Math.ceil(widths.length / 2));
 }
 
 /** The closed island's contents; emits `width-changed` when it needs another width. */
@@ -160,8 +140,8 @@ export const CompactView = GObject.registerClass({
         for (const item of this._statusItems)
             this._leftStatuses.add_child(item);
         this._leftSpacer = new St.Widget({x_expand: true});
-        this._left.add_child(this._leftStatuses);
         this._left.add_child(this._leftSpacer);
+        this._left.add_child(this._leftStatuses);
         this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
@@ -233,17 +213,17 @@ export const CompactView = GObject.registerClass({
     }
 
     /**
-     * Splits the live statuses across the two sides, the highest priority ones outward from the clock
-     * and the rest outward from the date.
+     * Fills the free slots nearest the clock and the date first, alternating sides: the first status
+     * takes the slot beside the clock, the second the one beside the date, the third the next slot
+     * left of the clock, and so on, so the row stays even whatever is active.
      */
     _spreadStatuses(statuses) {
-        const split = statusSplit(statuses.map(item => item.get_preferred_width(-1)[1]));
-        const signature = `${split}:${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
+        const clockSide = statuses.filter((_item, index) => index % 2 === 0);
+        const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}`;
         if (signature === this._statusSignature)
             return;
         this._statusSignature = signature;
 
-        const clockSide = statuses.slice(0, split);
         for (const item of this._statusItems) {
             item.visible = statuses.includes(item);
             const side = clockSide.includes(item) ? this._leftStatuses : this._rightStatuses;
@@ -253,10 +233,13 @@ export const CompactView = GObject.registerClass({
                 item.get_parent().remove_child(item);
             side.add_child(item);
         }
-        clockSide.forEach((item, index) => this._leftStatuses.set_child_at_index(item, index));
-        statuses.slice(split).forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
+        // The slot nearest the clock is the box's last child, so the left side runs opposite.
+        clockSide.forEach((item, index) =>
+            this._leftStatuses.set_child_at_index(item, clockSide.length - 1 - index));
+        statuses.filter((_item, index) => index % 2 === 1)
+            .forEach((item, index) => this._rightStatuses.set_child_at_index(item, index));
         this._leftStatuses.visible = clockSide.length > 0;
-        this._rightStatuses.visible = statuses.length > split;
+        this._rightStatuses.visible = statuses.length > clockSide.length;
     }
 
     /** Privacy dots are on in Settings and something is using the camera, microphone or screen. */
