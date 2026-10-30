@@ -218,10 +218,12 @@ export const CompactView = GObject.registerClass({
 
     /**
      * Splits the live statuses across the two sides by width, so both carry about the same and the
-     * notch grows evenly: each status in priority order takes whichever side is narrower so far
-     * (the left on a tie, keeping the highest priority statuses first). Clock-side and date-side
-     * slots fill outward from the clock and the date, so the clock and the date flank the assistant
-     * unmoved, whatever is active.
+     * notch grows evenly. The clock and the moon count towards the left, the date and the privacy
+     * dots towards the right, before any status is placed: the right side starts heavier, so the
+     * statuses lean left and no dead stretch opens beside the clock. Each status in priority order
+     * takes the placement that leaves the sides nearest level. Clock-side and date-side slots fill
+     * outward from the clock and the date, so the clock and the date flank the assistant unmoved,
+     * whatever is active.
      */
     _spreadStatuses(statuses) {
         // Gaps match `.isle-compact-status` (see `preferredWidth`).
@@ -232,13 +234,15 @@ export const CompactView = GObject.registerClass({
             return;
         this._statusSignature = signature;
 
-        let leftWidth = 0;
+        let leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap;
         let rightWidth = 0;
+        for (const item of [this._restDate, this._privacyDots].filter(item => item.visible))
+            rightWidth += item.get_preferred_width(-1)[1] + gap;
         const left = [];
         const right = [];
         for (const [index, item] of statuses.entries()) {
             const own = widths[index];
-            if (leftWidth <= rightWidth) {
+            if (Math.abs(leftWidth + own - rightWidth) <= Math.abs(leftWidth - (rightWidth + own))) {
                 left.push(item);
                 leftWidth += own;
             } else {
