@@ -15,7 +15,8 @@ All notable changes to Isle are listed here. The format follows
 - Assistant Settings can point Hermes elsewhere (a VPS on a tailnet): a Hermes endpoint and
   API key row, kept in ~/.config/isle/ai.env (mode 0600), overriding the local
   ~/.hermes/.env and environment. Empty endpoint means this computer's
-  http://127.0.0.1:8642/v1, as before.
+  http://127.0.0.1:8642/v1, as before. The key row hides what is typed (its eye shows it),
+  so the secret stays off the screen.
 - Hermes keeps its own personality: instead of being made into Isle ("You are Isle…"), it is
   told only what Isle is, the desktop actions and tools reachable through it, and how an
   answer is shaped. Its own persona, memory, skills and custom instructions stay Hermes'.
