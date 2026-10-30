@@ -294,10 +294,10 @@ export default class IslePreferences extends ExtensionPreferences {
         // Hermes usually lives on this computer; these two let it live elsewhere instead
         // (a VPS on a tailnet): they override the endpoint and key with what ~/.config/isle/ai.env
         // holds, the same private file the OpenAI-compatible API uses.
-        const hermesUrl = new Adw.EntryRow({title: 'Hermes endpoint', text: aiEnvValue('ISLE_HERMES_URL'),
-            subtitle: 'Empty for this computer (http://127.0.0.1:8642/v1); e.g. http://100.64.0.5:8642/v1'});
-        const hermesKey = new Adw.EntryRow({title: 'Hermes API key', text: aiEnvValue('HERMES_API_KEY'),
-            subtitle: 'Only for a Hermes elsewhere; on this computer Hermes owns its key'});
+        const hermesUrl = new Adw.EntryRow({title: 'Hermes endpoint (empty = http://127.0.0.1:8642/v1)',
+            text: aiEnvValue('ISLE_HERMES_URL')});
+        const hermesKey = new Adw.EntryRow({title: 'Hermes API key (only for a Hermes elsewhere)',
+            text: aiEnvValue('HERMES_API_KEY')});
         for (const [row, name] of [[hermesUrl, 'ISLE_HERMES_URL'], [hermesKey, 'HERMES_API_KEY']]) {
             row.visible = false;
             row.connect('changed', () => saveAiEnvValue(name, row.text.trim()));
