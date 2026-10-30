@@ -41,7 +41,7 @@ export class TopBar extends Signals.EventEmitter {
         this._dateMenu.reactive = false;
 
         this._settingsChanged = [
-            ...['top-bar-style', 'top-bar-opacity'].map(key => settings.connect(`changed::${key}`, () => {
+            ...['top-bar-style', 'top-bar-opacity', 'island-theme'].map(key => settings.connect(`changed::${key}`, () => {
                 this._yielded = false;
                 const blended = this._blended;
                 this._applyStyle();
@@ -106,9 +106,10 @@ export class TopBar extends Signals.EventEmitter {
         return this._settings.get_string('top-bar-style') === 'black' ? 100 : 0;
     }
 
-    /** Whether the bar is as black as the island; otherwise the island hangs from the screen's top edge. */
+    /** Whether the bar is as black as the island; otherwise the island hangs from the screen's top edge.
+     * GNOME's grey island never is. */
     get blendsIn() {
-        return this.opacity >= 100;
+        return this.opacity >= 100 && this._settings.get_string('island-theme') === 'black';
     }
 
     /** Keeps the top bar's centre clear for the island. */
