@@ -263,10 +263,15 @@ export const CompactView = GObject.registerClass({
         // the set changing (a ticking timer, a colder morning): both bring the sides out of level, so
         // either re-spreads. Widths measured before St has laid the last text change out are close
         // enough to keep the sides steady.
-        const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}` +
-            `:${widths.join(',')}`;
+        const ids = statuses.map(item => this._statusItems.indexOf(item)).join(',');
+        const signature = `${ids}:${widths.join(',')}`;
         if (signature === this._statusSignature)
             return;
+        // A different set of chips on reshapes the spread; the same set only re-measuring
+        // (a timer ticking) keeps whatever placement the last spread chose.
+        if (ids !== this._statusIds)
+            this._placedByForce = false;
+        this._statusIds = ids;
         this._statusSignature = signature;
 
         let leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap;
@@ -312,13 +317,14 @@ export const CompactView = GObject.registerClass({
         let {left, right, leftWidth: levelLeft, rightWidth: levelRight} = place(true);
         // Pass two: if keeping the sides ends far out of level (wider apart than the widest
         // status), every chip chooses again — otherwise the assistant would sit that far off the
-        // notch's middle. Hysteresis: a re-placement is remembered, and until keeping the sides
-        // is once more that far out of level, the levelled spread stands — a ticking timer's
-        // changing width cannot flip a chip back and forth across the threshold.
-        const outOfLevel = Math.abs(levelLeft - levelRight) > widest;
-        if (outOfLevel || this._placedByForce && Math.abs(levelLeft - levelRight) > widest * 2)
+        // notch's middle. Hysteresis: a placement the re-choose made is remembered; keeping it is
+        // then judged against twice the widest status, so a ticking timer's changing width cannot
+        // flip a chip back and forth across the first threshold.
+        const apart = Math.abs(levelLeft - levelRight);
+        if (apart > (this._placedByForce ? widest * 2 : widest)) {
             ({left, right} = place(false));
-        this._placedByForce = outOfLevel;
+            this._placedByForce = true;
+        }
         // Back to priority order, for the slots' fill order below.
         left.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
         right.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
