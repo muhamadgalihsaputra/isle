@@ -232,13 +232,13 @@ export const CompactView = GObject.registerClass({
             .filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, rightItems.length - 1);
-        // The sides take their natural width; their imbalance is worn by the row's end pads, all
-        // of it on the lighter side's, so the assistant sits in the middle of the notch whatever is
-        // on. A pad takes only that imbalance, never a fixed share: a fixed pad made a dead wing
-        // on the lighter side, wider than either side ever needed.
+        // The sides take their natural width. Their imbalance keeps the assistant in the notch's
+        // middle; split evenly between the two end pads, it also leaves both ends of the notch as
+        // full as each other instead of one dead wing — the pads weigh the same on both sides of
+        // the assistant, so it stays centred whatever is on.
         const imbalance = Math.abs(leftWidth - rightWidth);
-        this._rowPad.width = Math.ceil(leftWidth < rightWidth ? imbalance : 0);
-        this._rowEndPad.width = Math.ceil(leftWidth > rightWidth ? imbalance : 0);
+        this._rowPad.width = Math.ceil(imbalance / 2);
+        this._rowEndPad.width = imbalance - this._rowPad.width;
         // Row padding, and the row's four gaps: pad, side, assistant, side, pad.
         return Math.ceil(2 * px(this._inBar ? 14 : 16) + 4 * px(12) + leftWidth + rightWidth +
             this._rowPad.width + this._rowEndPad.width + px(size.center));
