@@ -224,7 +224,10 @@ async fn run(call: Value) -> String {
     if call["type"] == "check" {
         return check::run(call["command"].as_str().unwrap_or_default()).await;
     }
-    if matches!(call["type"].as_str(), Some("find_phone") | Some("send_clipboard")) {
+    if matches!(
+        call["type"].as_str(),
+        Some("find_phone") | Some("send_clipboard")
+    ) {
         return crate::devices::tool(&call).await;
     }
     tokio::task::spawn_blocking(move || run_now(&call, &home()))
@@ -314,8 +317,7 @@ impl Ask for Brain {
     /// Hermes and OMP route their native-tool approvals through the island's Allow / Deny, which
     /// the user may answer slowly.
     fn asks_approvals(&self) -> bool {
-        matches!(self.provider(), super::brain::Provider::Hermes)
-            || matches!(self, Brain::Omp(_))
+        matches!(self.provider(), super::brain::Provider::Hermes) || matches!(self, Brain::Omp(_))
     }
 }
 
@@ -329,7 +331,11 @@ pub struct Out<'a> {
 
 /// Asks once within its time (see `Ask::asks_approvals`), and strips any `spawn` or `stop` the AI wrote itself.
 async fn ask_in_time(brain: &mut impl Ask, prompt: &str, out: &Out<'_>) -> anyhow::Result<Answer> {
-    let limit = if brain.asks_approvals() { APPROVAL } else { ASK_TIMEOUT };
+    let limit = if brain.asks_approvals() {
+        APPROVAL
+    } else {
+        ASK_TIMEOUT
+    };
     let mut answer = tokio::time::timeout(limit, brain.ask(prompt, out.activity, out.draft))
         .await
         .map_err(|_| anyhow::Error::new(TooLong))??;
@@ -693,8 +699,8 @@ mod tests {
             describe(&json!({"type": "find_phone"})),
             "Ringing your phone…"
         );
-        assert_eq!(is_tool(&json!({"type": "find_phone"})), true);
-        assert_eq!(is_tool(&json!({"type": "send_clipboard", "text": "hi"})), true);
+        assert!(is_tool(&json!({"type": "find_phone"})));
+        assert!(is_tool(&json!({"type": "send_clipboard", "text": "hi"})));
         assert!(is_tool(&find) && !is_tool(&json!({"type": "open_url"})));
     }
 

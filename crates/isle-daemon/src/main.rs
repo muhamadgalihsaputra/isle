@@ -8,11 +8,11 @@ mod agents;
 mod app_usage;
 mod assistant;
 mod calendar;
-mod devices;
 mod caller;
 mod calories;
 mod clipboard;
 mod clock;
+mod devices;
 mod eds;
 mod http;
 mod login_env;
@@ -181,7 +181,12 @@ async fn run() -> anyhow::Result<()> {
     let pomodoro = server.interface::<_, PomodoroService>(OBJECT_PATH).await?;
     let todo = server.interface::<_, TodoService>(OBJECT_PATH).await?;
     let system = server.interface::<_, SystemService>(OBJECT_PATH).await?;
-    server.at(OBJECT_PATH, DevicesService::new(session.clone(), system.clone())).await?;
+    server
+        .at(
+            OBJECT_PATH,
+            DevicesService::new(session.clone(), system.clone()),
+        )
+        .await?;
     let app_usage = server.interface::<_, AppUsageService>(OBJECT_PATH).await?;
     let assistant = server.interface::<_, AssistantService>(OBJECT_PATH).await?;
     let usage = server.interface::<_, UsageService>(OBJECT_PATH).await?;

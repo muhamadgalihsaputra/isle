@@ -78,7 +78,8 @@ pub fn from_text(text: &str) -> Answer {
         .or_else(|| text.strip_prefix("```"))
         .and_then(|rest| rest.trim_end().strip_suffix("```"))
         .map_or(text, str::trim);
-    let mut answer: Answer = serde_json::from_str(inner).or_else(|_| find_json(inner))
+    let mut answer: Answer = serde_json::from_str(inner)
+        .or_else(|_| find_json(inner))
         .unwrap_or_else(|_| Answer::plain(text));
     answer.actions.iter_mut().for_each(window_focus);
     answer
@@ -234,7 +235,9 @@ mod tests {
         assert_eq!(plain.say, "Sure, it is 3 pm.");
         assert!(plain.actions.is_empty() && plain.done);
         // A gateway's own note before the JSON (Hermes streaming): the answer is read all the same.
-        let noted = from_text("[Response transformed after streaming] {\"say\":\"wei, galih. ada apa?\",\"actions\":[]}");
+        let noted = from_text(
+            "[Response transformed after streaming] {\"say\":\"wei, galih. ada apa?\",\"actions\":[]}",
+        );
         assert_eq!(noted.say, "wei, galih. ada apa?");
         assert!(noted.actions.is_empty() && noted.done);
         // Words that hold a brace are said as they are, not read as an answer.

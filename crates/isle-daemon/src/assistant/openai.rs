@@ -126,7 +126,13 @@ impl Client {
         let draft_tx = draft.cloned();
         let activity_tx = activity.cloned();
         let content = tokio::task::spawn_blocking(move || {
-            this.stream_complete(&request_prompt, activity_tx.as_ref(), draft_tx.as_ref(), &cancel, &handle)
+            this.stream_complete(
+                &request_prompt,
+                activity_tx.as_ref(),
+                draft_tx.as_ref(),
+                &cancel,
+                &handle,
+            )
         })
         .await??;
         self.history.push(json!({"role":"user","content":prompt}));
@@ -148,10 +154,10 @@ impl Client {
     fn save_history(&self) {
         let kind = if self.hermes_mode { "hermes" } else { "openai" };
         let path = history_path(kind);
-        if crate::store::create_private_dir(&crate::store::data_dir()).is_ok() {
-            if let Ok(text) = serde_json::to_string(&self.history) {
-                let _ = crate::store::write_private(&path, text.as_bytes());
-            }
+        if crate::store::create_private_dir(&crate::store::data_dir()).is_ok()
+            && let Ok(text) = serde_json::to_string(&self.history)
+        {
+            let _ = crate::store::write_private(&path, text.as_bytes());
         }
     }
 
@@ -385,11 +391,11 @@ fn accumulate_sse<R: BufRead>(
             event_name.clear();
             continue;
         }
-        if let Some(delta) = event["choices"][0]["delta"]["content"].as_str() {
-            if !delta.is_empty() {
-                accumulated.push_str(delta);
-                on_delta(&accumulated);
-            }
+        if let Some(delta) = event["choices"][0]["delta"]["content"].as_str()
+            && !delta.is_empty()
+        {
+            accumulated.push_str(delta);
+            on_delta(&accumulated);
         }
     }
     if cancel.load(Ordering::SeqCst) {
@@ -481,10 +487,10 @@ fn discover_omp_models() -> anyhow::Result<Vec<String>> {
 }
 
 fn config_value(name: &str) -> Option<String> {
-    if let Ok(value) = std::env::var(name) {
-        if !value.is_empty() {
-            return Some(value);
-        }
+    if let Ok(value) = std::env::var(name)
+        && !value.is_empty()
+    {
+        return Some(value);
     }
     let path = dirs::config_dir()?.join("isle/ai.env");
     let metadata = std::fs::metadata(&path).ok()?;

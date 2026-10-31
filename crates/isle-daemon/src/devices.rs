@@ -44,14 +44,23 @@ impl DevicesService {
 
     /// Activates one of the device's actions over `org.gtk.Actions`, GSConnect's own way of
     /// exposing its plugins' actions on the bus.
-    async fn activate(&self, device: &Device, action: &str, arguments: &[ZValue<'_>]) -> zbus::fdo::Result<()> {
+    async fn activate(
+        &self,
+        device: &Device,
+        action: &str,
+        arguments: &[ZValue<'_>],
+    ) -> zbus::fdo::Result<()> {
         self.session
             .call_method(
                 Some(SERVICE),
                 device.id.as_str(),
                 Some("org.gtk.Actions"),
                 "Activate",
-                &(action, arguments, &std::collections::HashMap::<String, ZValue>::new()),
+                &(
+                    action,
+                    arguments,
+                    &std::collections::HashMap::<String, ZValue>::new(),
+                ),
             )
             .await?;
         Ok(())
@@ -70,13 +79,15 @@ impl DevicesService {
     /// Sends the clipboard to the device's share plugin.
     async fn send_clipboard(&self, id: &str, text: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.activate(&device, "shareText", &[ZValue::from(text)]).await
+        self.activate(&device, "shareText", &[ZValue::from(text)])
+            .await
     }
 
     /// Sends a file to the device's share plugin; `path` is a local file path.
     async fn send_file(&self, id: &str, file: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.activate(&device, "shareUri", &[ZValue::from(file)]).await
+        self.activate(&device, "shareUri", &[ZValue::from(file)])
+            .await
     }
 
     /// Mutes a ringing call on the device's telephony plugin: the only call action GSConnect
@@ -110,7 +121,11 @@ pub async fn tool(call: &serde_json::Value) -> String {
             device.id.as_str(),
             Some("org.gtk.Actions"),
             "Activate",
-            &(action, arguments.as_slice(), &std::collections::HashMap::<String, ZValue>::new()),
+            &(
+                action,
+                arguments.as_slice(),
+                &std::collections::HashMap::<String, ZValue>::new(),
+            ),
         )
         .await;
     match result {

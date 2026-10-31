@@ -67,7 +67,12 @@ pub async fn watch(session: Connection, iface: InterfaceRef<SystemService>) -> a
         let after = read_devices(&session).await;
         let events = changes(&before, &after);
         before.clone_from(&after);
-        publish(&iface, |state| state.devices = after, events.first().cloned()).await;
+        publish(
+            &iface,
+            |state| state.devices = after,
+            events.first().cloned(),
+        )
+        .await;
         for event in events.into_iter().skip(1) {
             publish(&iface, |_| (), Some(event)).await;
         }
@@ -189,7 +194,13 @@ async fn read_device(
 /// level (-1 when the device reports none), time remaining.
 async fn read_battery(session: &Connection, path: &str) -> (Option<u8>, bool) {
     let state = session
-        .call_method(Some(SERVICE), path, Some("org.gtk.Actions"), "DescribeAll", &())
+        .call_method(
+            Some(SERVICE),
+            path,
+            Some("org.gtk.Actions"),
+            "DescribeAll",
+            &(),
+        )
         .await
         .ok()
         .and_then(|reply| {
