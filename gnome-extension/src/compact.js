@@ -76,7 +76,8 @@ export const CompactView = GObject.registerClass({
 
         this._restDate = label('', 'isle-compact-rest-date', {y_align: Clutter.ActorAlign.CENTER});
 
-        this._ring = new Ring({size: 20, lineWidth: 3});
+        this._ring = new Ring({size: 20, lineWidth: 3, child: new St.Icon({gicon: icon('isle-timer'),
+            icon_size: 10, y_align: Clutter.ActorAlign.CENTER})});
         this._recordingDot = new RecordingDot();
         this._recordingTime = label('', 'isle-compact-status-time isle-compact-recording-time');
         this._callIcon = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 15, style_class: 'isle-call-icon', y_align: Clutter.ActorAlign.CENTER});
