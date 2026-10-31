@@ -294,7 +294,11 @@ export const CompactView = GObject.registerClass({
                 .map(item => [item, widths[statuses.indexOf(item)]])
                 .sort((a, b) => b[1] - a[1])
                 .forEach(([item, own]) => {
-                    const lighter = leftWidth <= rightWidth ? left : right;
+                    // The bell never sits beside the date: when both sides would do, it takes the
+                    // clock's, so the right side stays the date's and does not grow too long.
+                    const lighter = item === this._notificationStatus
+                        ? (leftWidth <= rightWidth + own ? left : right)
+                        : leftWidth <= rightWidth ? left : right;
                     lighter.push(item);
                     if (lighter === left)
                         leftWidth += own;
@@ -468,7 +472,9 @@ export const CompactView = GObject.registerClass({
             this._phoneBattery.style = phone.battery <= 20 ? 'color: #ff453a;' : null;
         }
         // Split every live status across both sides in a stable priority order, so neither side is left
-        // bare; a service failure replaces the statuses with a single warning.
+        // bare; a service failure replaces the statuses with a single warning. The unseen
+        // notifications always take the clock's side: the date keeps the right one heavy, and the
+        // bell balances it (see the spread's `kept`).
         const statuses = this._isServiceDown ? [this._serviceDown] : [
             timerActive && this._timerStatus,
             recording && this._recordingStatus,
