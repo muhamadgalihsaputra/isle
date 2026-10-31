@@ -852,7 +852,11 @@ export const VoiceView = GObject.registerClass({
         // Typing, the field takes the button's place too (its send is inside it). A command card keeps the
         // button's room as it waits, runs and ends, so it never changes width.
         const scale = uiScale();
-        const width = this.preferredWidth - (TEXT_INSET - (this._action.visible || this._card.visible ? 0 : ACTION_SIZE + 12)) * scale;
+        // The conversation button sits beside the end button, and takes that much of the row's
+        // width too when it shows, so the texts give way by both, not just one.
+        const ends = (this._action.visible || this._card.visible ? 0 : ACTION_SIZE + 12) -
+            (this._chatSlot.visible ? ACTION_SIZE + 12 : 0);
+        const width = this.preferredWidth - (TEXT_INSET - ends) * scale;
         // Measured per label: the box's own answer is the size set below.
         const parts = [this._undo, this._heardButton, this._entry, this._ideas, this._text, this._card, this._stepsBox, this._still,
             this._hint, this._signIn, this._setUp];
