@@ -148,15 +148,15 @@ export const CompactView = GObject.registerClass({
         this._openOnChanged = settings.connect('changed::open-on', () => this._scheduleAssistantHover());
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
-        this._statusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._weatherStatus, this._phoneStatus];
+        this._statusItems = [this._serviceDown, this._musicArt, this._timerStatus, this._recordingStatus,
+            this._callStatus, this._notificationStatus, this._weatherStatus, this._phoneStatus,
+            this._musicStatus];
         this._leftStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         this._rightStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         for (const item of this._statusItems)
             this._leftStatuses.add_child(item);
-        this._left.add_child(this._musicArt);
         this._left.add_child(this._leftStatuses);
         this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
@@ -164,11 +164,9 @@ export const CompactView = GObject.registerClass({
         this._right.add_child(this._restDate);
         this._right.add_child(this._rightStatuses);
         this._right.add_child(this._privacyDots);
-        // The song's two signs live in opposite corners, as the island's own music page splits them:
-        // the cover at the notch's left edge, the dancing bars at its right edge.
-        this._right.add_child(this._musicStatus);
-        // The clock and the date sit beside the assistant and never move; the live statuses rest
-        // at the notch's outer edges, so nothing crowds the centre or reads as a second time.
+        // The clock and the date sit beside the assistant and never move; every live status, the
+        // song's cover and its dancing bars among them, is spread across the two sides by width, so
+        // the assistant stays in the notch's middle whatever is on.
 
 
         this._weather = new WeatherWatcher(settings);
@@ -224,11 +222,11 @@ export const CompactView = GObject.registerClass({
         const gap = px(this._inBar ? 10 : 12);
         // The side's own spacing lays its children out: one gap between each pair of them, so a side
         // measures as the sum of what is on plus a gap per pair.
-        const leftItems = [this._musicArt, this._leftStatuses, this._clockBox].filter(item => item.visible);
+        const leftItems = [this._leftStatuses, this._clockBox].filter(item => item.visible);
         const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, leftItems.length - 1);
         // The bars sit in the right corner, the cover's opposite, past the privacy dots.
-        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots, this._musicStatus]
+        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots]
             .filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, rightItems.length - 1);
@@ -273,12 +271,18 @@ export const CompactView = GObject.registerClass({
             rightWidth += item.get_preferred_width(-1)[1] + gap;
         const left = [];
         const right = [];
+        // A side that would end far out of level (wider than the other by more than the widest
+        // status) releases its kept chips to choose again: keeping them put would park the
+        // assistant off the notch's middle. Small changes keep their sides, so chips do not
+        // reshuffle on every tick.
+        const widest = widths.length ? Math.max(...widths) : 0;
+        const held = leftWidth + rightWidth > 0 && Math.abs(leftWidth - rightWidth) > widest;
         // What is on stays on its side (its chip keeps its place while another comes or goes:
         // a status appearing would otherwise reshuffle them all); only the new ones choose, and of
         // those the widest first, onto the lighter side, so the sides level whatever is active.
         for (const [index, item] of statuses.entries()) {
-            const kept = this._leftStatuses.get_children().includes(item) ? left
-                : this._rightStatuses.get_children().includes(item) ? right : null;
+            const kept = !held && (this._leftStatuses.get_children().includes(item) ? left
+                : this._rightStatuses.get_children().includes(item) ? right : null);
             if (kept === left) {
                 left.push(item);
                 leftWidth += widths[index];
@@ -459,19 +463,18 @@ export const CompactView = GObject.registerClass({
         // Split every live status across both sides in a stable priority order, so neither side is left
         // bare; a service failure replaces the statuses with a single warning.
         const statuses = this._isServiceDown ? [this._serviceDown] : [
+            hasTrack && this._musicArt,
             timerActive && this._timerStatus,
             recording && this._recordingStatus,
             onCall && this._callStatus,
             this._unseen > 0 && this._notificationStatus,
             this._weather.state.temperature && this._weatherStatus,
             phone && this._phoneStatus,
+            hasTrack && this._musicStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
-        // The cover sits in the left corner while the song plays; the placeholder stands while a
-        // player sends no art. The bars sit in the right corner, its opposite.
-        this._musicArt.visible = !this._isServiceDown && hasTrack;
+        // The cover stands for its song while a player sends no art; the bars dance beside it.
         this._musicArt.setPath(this._isServiceDown || !hasTrack ? '' : nowPlaying.art_path);
-        this._musicStatus.visible = !this._isServiceDown && hasTrack;
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
