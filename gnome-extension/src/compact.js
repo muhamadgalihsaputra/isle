@@ -268,13 +268,19 @@ export const CompactView = GObject.registerClass({
         // What is on stays on its side (its chip keeps its place while another comes or goes:
         // a status appearing would otherwise reshuffle them all); only the new ones choose, and of
         // those the widest first, onto the lighter side, so the sides level whatever is active.
+        // A side that ends far out of level (wider than the other by more than the widest status)
+        // lets its statuses choose again: keeping them put would instead stretch one pad dead-wide,
+        // which reads as a hole in the notch.
+        const widest = widths.length ? Math.max(...widths) : 0;
+        const kept = leftWidth + rightWidth > 0 &&
+            Math.abs(leftWidth - rightWidth) > widest;
         for (const [index, item] of statuses.entries()) {
-            const kept = this._leftStatuses.get_children().includes(item) ? left
+            const side = this._leftStatuses.get_children().includes(item) ? left
                 : this._rightStatuses.get_children().includes(item) ? right : null;
-            if (kept === left) {
+            if (!kept && side === left) {
                 left.push(item);
                 leftWidth += widths[index];
-            } else if (kept === right) {
+            } else if (!kept && side === right) {
                 right.push(item);
                 rightWidth += widths[index];
             }
