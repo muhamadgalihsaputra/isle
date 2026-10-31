@@ -27,6 +27,8 @@ const SIZES = {
     hanging: {center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16, music: 18},
     inBar: {center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14, music: 16},
 };
+/** The pointer still for this long no longer holds the eyes (as voice.js's POINTER_REST_S). */
+const POINTER_REST_MS = 2500;
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
@@ -261,10 +263,15 @@ export const CompactView = GObject.registerClass({
         // the set changing (a ticking timer, a colder morning): both bring the sides out of level, so
         // either re-spreads. Widths measured before St has laid the last text change out are close
         // enough to keep the sides steady.
-        const signature = `${statuses.map(item => this._statusItems.indexOf(item)).join(',')}` +
-            `:${widths.join(',')}`;
+        const ids = statuses.map(item => this._statusItems.indexOf(item)).join(',');
+        const signature = `${ids}:${widths.join(',')}`;
         if (signature === this._statusSignature)
             return;
+        // A different set of chips on reshapes the spread; the same set only re-measuring
+        // (a timer ticking) keeps whatever placement the last spread chose.
+        if (ids !== this._statusIds)
+            this._placedByForce = false;
+        this._statusIds = ids;
         this._statusSignature = signature;
 
         let leftWidth = this._clockBox.get_preferred_width(-1)[1] + gap;
@@ -294,10 +301,10 @@ export const CompactView = GObject.registerClass({
                 .map(item => [item, widths[statuses.indexOf(item)]])
                 .sort((a, b) => b[1] - a[1])
                 .forEach(([item, own]) => {
-                    // The bell never sits beside the date: when both sides would do, it takes the
-                    // clock's, so the right side stays the date's and does not grow too long.
-                    const lighter = item === this._notificationStatus
-                        ? (leftWidth <= rightWidth + own ? left : right)
+                    // The bell prefers the clock's side, but never past level: with it there the
+                    // left may not end heavier than the right (the date's own side).
+                    const lighter = item === this._notificationStatus && leftWidth + own <= rightWidth
+                        ? left
                         : leftWidth <= rightWidth ? left : right;
                     lighter.push(item);
                     if (lighter === left)
@@ -310,9 +317,14 @@ export const CompactView = GObject.registerClass({
         let {left, right, leftWidth: levelLeft, rightWidth: levelRight} = place(true);
         // Pass two: if keeping the sides ends far out of level (wider apart than the widest
         // status), every chip chooses again — otherwise the assistant would sit that far off the
-        // notch's middle. Small changes (a ticking timer) keep their sides, so chips stay put.
-        if (Math.abs(levelLeft - levelRight) > widest)
+        // notch's middle. Hysteresis: a placement the re-choose made is remembered; keeping it is
+        // then judged against twice the widest status, so a ticking timer's changing width cannot
+        // flip a chip back and forth across the first threshold.
+        const apart = Math.abs(levelLeft - levelRight);
+        if (apart > (this._placedByForce ? widest * 2 : widest)) {
             ({left, right} = place(false));
+            this._placedByForce = true;
+        }
         // Back to priority order, for the slots' fill order below.
         left.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
         right.sort((a, b) => statuses.indexOf(a) - statuses.indexOf(b));
@@ -633,17 +645,28 @@ export const CompactView = GObject.registerClass({
 
     /** Keep the resting face aware of the desktop pointer, wherever it is — over the notch, the
      * top bar or another app's window. Motion events only arrive over the shell's own parts, so
-     * the pointer is read each frame, as the chat view reads it (see voice.js). */
+     * the pointer is read each frame, as the chat view reads it (see voice.js). Once the pointer
+     * has been still for POINTER_REST_MS, the eyes let it go and glance about on their own again;
+     * a read a frame while it moves is cheap, and none while it rests. */
     _startAssistantPointerTracking() {
         if (this._assistantPointerTimeline || !this.mapped || this._idle)
             return;
-        const followPointer = () => {
+        this._pointerLast = [0, 0];
+        this._pointerAt = 0;
+        const followPointer = (timeline, ms) => {
             const [x, y] = global.get_pointer();
-            this._assistant.lookAtPointer(x, y);
+            if (x !== this._pointerLast[0] || y !== this._pointerLast[1]) {
+                this._pointerLast = [x, y];
+                this._pointerAt = ms;
+                this._assistant.lookAtPointer(x, y);
+            } else if (ms - this._pointerAt >= POINTER_REST_MS) {
+                this._assistant.lookAway();
+            }
         };
-        followPointer();
-        // A repeating timeline is one frame a second while nothing moves its eyes: cheap, and the
-        // eyes settle into their glance rather than jumping between the alive blinks.
+        followPointer(0, 0);
+        // Animations off: the eyes turn once to where the pointer is and hold there, no ticking.
+        if (!St.Settings.get().enable_animations)
+            return;
         this._assistantPointerTimeline = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
         this._assistantPointerTimeline.connect('new-frame', followPointer);
         this._assistantPointerTimeline.start();
