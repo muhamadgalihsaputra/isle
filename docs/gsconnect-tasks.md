@@ -8,7 +8,7 @@ phase before it is verified on a live desktop with a paired phone.
 
 ### 1. Daemon: watch GSConnect on the session bus
 
-- [ ] Add a `gsconnect` module to `isled` that follows the
+- [x] Add a `gsconnect` module to `isled` that follows the
   `org.gnome.Shell.Extensions.GSConnect` name on the session bus, under the
   same supervision pattern as UPower and NetworkManager (`system/mod.rs`):
   comes up when the name appears, backs off on failure, goes away cleanly.

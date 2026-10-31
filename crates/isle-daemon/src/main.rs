@@ -209,9 +209,11 @@ async fn run() -> anyhow::Result<()> {
     tokio::spawn(assistant::run(assistant, own_data, assistant_commands));
 
     match zbus::Connection::system().await {
-        Ok(bus) => system::spawn_watchers(bus, system),
+        Ok(bus) => system::spawn_watchers(bus, system.clone()),
         Err(err) => warn!("no system bus, so no battery, network or Bluetooth status: {err}"),
     }
+    // GSConnect is a GNOME Shell extension on the session bus, not the system one.
+    system::spawn_session_watchers(session.clone(), system);
 
     // Claim the name last, so callers never see a half-initialised service; never taking it from another.
     let claimed = session
