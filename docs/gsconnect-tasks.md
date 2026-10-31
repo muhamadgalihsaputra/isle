@@ -27,12 +27,12 @@ without polling, and Isle stays silent with GSConnect gone.
 
 ### 2. Compact island: the phone battery chip
 
-- [ ] Add the chip to `compact.js` as one of `_statusItems`: device-type icon,
+- [x] Add the chip to `compact.js` as one of `_statusItems`: device-type icon,
   percentage, red under 20%; joins `_spreadStatuses` like the weather.
-- [ ] Show it only while its device is connected and reporting (battery
+- [x] Show it only while its device is connected and reporting (battery
   greater than -1); no chip for a paired-but-disconnected phone.
-- [ ] Count it in `preferredWidth` and `_spreadStatuses` like every other
-  status.
+- [x] Count it in `preferredWidth` and `_spreadStatuses` like every other
+  status (it is one of the spread statuses, so both count it already).
 - [ ] Verify: chip takes a side and re-spreads with weather and timer on;
   notch keeps its centred assistant and level sides (the two pad widths);
   chip leaves without a trace when the phone disconnects.

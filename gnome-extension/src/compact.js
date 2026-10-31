@@ -111,6 +111,14 @@ export const CompactView = GObject.registerClass({
             visible: false});
         this._weatherStatus.add_child(this._weatherIcon);
         this._weatherStatus.add_child(this._weatherTemperature);
+        // The first connected GSConnect device's battery, as a phone chip beside the weather.
+        this._phoneIcon = new St.Icon({gicon: icon('isle-phone-symbolic'), icon_size: 16,
+            y_align: Clutter.ActorAlign.CENTER});
+        this._phoneBattery = label('', 'isle-compact-status-time');
+        this._phoneStatus = new St.BoxLayout({style_class: 'isle-compact-status-item', y_align: Clutter.ActorAlign.CENTER,
+            visible: false});
+        this._phoneStatus.add_child(this._phoneIcon);
+        this._phoneStatus.add_child(this._phoneBattery);
 
         this._assistant = new BotIcon(ASSISTANT_SIZE, this._botLook());
         this._assistant.y_align = Clutter.ActorAlign.CENTER;
@@ -138,7 +146,7 @@ export const CompactView = GObject.registerClass({
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
         this._statusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._musicStatus, this._weatherStatus];
+            this._notificationStatus, this._musicStatus, this._weatherStatus, this._phoneStatus];
         this._leftStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         this._rightStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
@@ -175,7 +183,7 @@ export const CompactView = GObject.registerClass({
         row.add_child(new St.Widget({x_expand: true}));
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
-            if (['nowPlaying', 'pomodoro'].includes(key))
+            if (['nowPlaying', 'pomodoro', 'system'].includes(key))
                 this._refresh();
         });
         this._settingsChanged = settings.connect('changed::privacy-indicators', () => this._refresh());
@@ -397,6 +405,7 @@ export const CompactView = GObject.registerClass({
         this._moon.icon_size = size.moon;
         this._callIcon.icon_size = this._micOff.icon_size = size.call;
         this._weatherIcon.icon_size = size.weather;
+        this._phoneIcon.icon_size = size.weather;
         this._assistantButton.set_size(px(size.center), px(size.center));
         if (inBar)
             this.add_style_class_name('isle-compact-in-bar');
@@ -431,6 +440,15 @@ export const CompactView = GObject.registerClass({
         const timerActive = Boolean(pomodoro && pomodoro.phase !== 'idle' && focusVisible);
         const recording = this._privacy.recording;
         const onCall = this._call.active;
+        // The first connected device that reports a battery; its chip says the figure and says red when low.
+        const phone = this._daemon.state.system?.devices?.find(device => device.battery !== null &&
+            device.battery !== undefined) ?? null;
+        this._phoneStatus.visible = !this._isServiceDown && Boolean(phone);
+        if (phone) {
+            this._phoneBattery.text = `${phone.battery}%`;
+            this._phoneStatus.accessible_name = `${phone.name} battery ${phone.battery} percent`;
+            this._phoneBattery.style = phone.battery <= 20 ? 'color: #ff453a;' : null;
+        }
         // Split every live status across both sides in a stable priority order, so neither side is left
         // bare; a service failure replaces the statuses with a single warning.
         const statuses = this._isServiceDown ? [this._serviceDown] : [
@@ -440,6 +458,7 @@ export const CompactView = GObject.registerClass({
             this._unseen > 0 && this._notificationStatus,
             hasTrack && this._musicStatus,
             this._weather.state.temperature && this._weatherStatus,
+            phone && this._phoneStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
         // The cover sits in the left corner while the song plays; the placeholder stands while a
