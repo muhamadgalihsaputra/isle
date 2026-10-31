@@ -141,8 +141,9 @@ with the wheel or touchpad and never show a scrollbar.
   a header of its own when open, and GNOME's clock comes back to the main top bar meanwhile.
 - The two rest items flank the assistant: the clock (follows GNOME's 12/24-hour setting, with the
   Do Not Disturb moon before it) just left of it, the date just right.
-- Centre: the assistant's 26 px face in the chosen look. Its eyes follow the pointer over the face,
-  and it blinks and glances every few seconds. Click or rest the pointer on it to open the assistant.
+- Centre: the assistant's 26 px face in the chosen look. Its eyes follow the pointer wherever it
+  is on screen, as the open island's face does; and it blinks and glances every few seconds. Click
+  or rest the pointer on it to open the assistant.
   While the assistant works in the background, its expression shows that state.
 - At the notch's outer edges: the live statuses in priority order — focus timer → screen
   recording → call → unseen notifications → music → weather — split across the two sides by

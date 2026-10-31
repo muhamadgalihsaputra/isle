@@ -54,7 +54,7 @@ export const CompactView = GObject.registerClass({
         this._inBar = false;
         this._voiceEnabled = false;
         this._timeouts = {};
-        this._assistantPointerMotion = 0;
+        this._assistantPointerTimeline = null;
         this._widthChangedIdle = 0;
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
@@ -631,25 +631,29 @@ export const CompactView = GObject.registerClass({
         }
     }
 
-    /** Keep the resting face aware of the desktop pointer, even when it is outside the notch. */
+    /** Keep the resting face aware of the desktop pointer, wherever it is — over the notch, the
+     * top bar or another app's window. Motion events only arrive over the shell's own parts, so
+     * the pointer is read each frame, as the chat view reads it (see voice.js). */
     _startAssistantPointerTracking() {
-        if (this._assistantPointerMotion || !this.mapped || this._idle)
+        if (this._assistantPointerTimeline || !this.mapped || this._idle)
             return;
-        const followPointer = (_stage, event) => {
-            const [x, y] = event.get_coords();
+        const followPointer = () => {
+            const [x, y] = global.get_pointer();
             this._assistant.lookAtPointer(x, y);
-            return Clutter.EVENT_PROPAGATE;
         };
-        const [x, y] = global.get_pointer();
-        this._assistant.lookAtPointer(x, y);
-        this._assistantPointerMotion = global.stage.connect('motion-event', followPointer);
+        followPointer();
+        // A repeating timeline is one frame a second while nothing moves its eyes: cheap, and the
+        // eyes settle into their glance rather than jumping between the alive blinks.
+        this._assistantPointerTimeline = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
+        this._assistantPointerTimeline.connect('new-frame', followPointer);
+        this._assistantPointerTimeline.start();
     }
 
     _stopAssistantPointerTracking() {
-        if (!this._assistantPointerMotion)
+        if (!this._assistantPointerTimeline)
             return;
-        global.stage.disconnect(this._assistantPointerMotion);
-        this._assistantPointerMotion = 0;
+        this._assistantPointerTimeline.stop();
+        this._assistantPointerTimeline = null;
     }
 
     /** The assistant's shape and colours, from Settings (see bot.js). */
