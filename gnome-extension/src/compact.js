@@ -140,7 +140,7 @@ export const CompactView = GObject.registerClass({
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
         this._statusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._musicStatus, this._weatherStatus];
+            this._notificationStatus, this._weatherStatus];
         this._leftStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         this._rightStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
@@ -155,6 +155,9 @@ export const CompactView = GObject.registerClass({
         this._right.add_child(this._restDate);
         this._right.add_child(this._rightStatuses);
         this._right.add_child(this._privacyDots);
+        // The song's two signs live in opposite corners, as the island's own music page splits them:
+        // the cover at the notch's left edge, the dancing bars at its right edge.
+        this._right.add_child(this._musicStatus);
         // The clock and the date sit beside the assistant and never move; the live statuses rest
         // at the notch's outer edges, so nothing crowds the centre or reads as a second time.
 
@@ -215,7 +218,9 @@ export const CompactView = GObject.registerClass({
         const leftItems = [this._musicArt, this._leftStatuses, this._clockBox].filter(item => item.visible);
         const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, leftItems.length - 1);
-        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
+        // The bars sit in the right corner, the cover's opposite, past the privacy dots.
+        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots, this._musicStatus]
+            .filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, rightItems.length - 1);
         // The sides take their natural width; their imbalance is worn by the row's two end pads, all
@@ -440,14 +445,14 @@ export const CompactView = GObject.registerClass({
             recording && this._recordingStatus,
             onCall && this._callStatus,
             this._unseen > 0 && this._notificationStatus,
-            hasTrack && this._musicStatus,
             this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
         // The cover sits in the left corner while the song plays; the placeholder stands while a
-        // player sends no art.
+        // player sends no art. The bars sit in the right corner, its opposite.
         this._musicArt.visible = !this._isServiceDown && hasTrack;
         this._musicArt.setPath(this._isServiceDown || !hasTrack ? '' : nowPlaying.art_path);
+        this._musicStatus.visible = !this._isServiceDown && hasTrack;
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
