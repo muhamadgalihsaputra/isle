@@ -24,8 +24,8 @@ const ASSISTANT_SIZE = 26;
 
 /** Icon and assistant sizes, in CSS pixels. */
 const SIZES = {
-    hanging: {side: 72, center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16, music: 18},
-    inBar: {side: 72, center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14, music: 16},
+    hanging: {center: 34, ring: 20, bars: 16, moon: 14, call: 15, weather: 16, music: 18},
+    inBar: {center: 30, ring: 18, bars: 14, moon: 13, call: 14, weather: 14, music: 16},
 };
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
@@ -232,14 +232,13 @@ export const CompactView = GObject.registerClass({
             .filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * Math.max(0, rightItems.length - 1);
-        // The sides take their natural width; their imbalance is worn by the row's two end pads, all
+        // The sides take their natural width; their imbalance is worn by the row's end pads, all
         // of it on the lighter side's, so the assistant sits in the middle of the notch whatever is
-        // on (a pad and a side weigh the same on either side of it). No side is stretched to the
-        // other's width, which left the lighter one's spacer as a long dead stretch, and no spacer
-        // sits inside a side to catch spare room and split the content.
+        // on. A pad takes only that imbalance, never a fixed share: a fixed pad made a dead wing
+        // on the lighter side, wider than either side ever needed.
         const imbalance = Math.abs(leftWidth - rightWidth);
-        this._rowPad.width = Math.ceil(px(size.side) + (leftWidth < rightWidth ? imbalance : 0));
-        this._rowEndPad.width = Math.ceil(px(size.side) + (leftWidth > rightWidth ? imbalance : 0));
+        this._rowPad.width = Math.ceil(leftWidth < rightWidth ? imbalance : 0);
+        this._rowEndPad.width = Math.ceil(leftWidth > rightWidth ? imbalance : 0);
         // Row padding, and the row's four gaps: pad, side, assistant, side, pad.
         return Math.ceil(2 * px(this._inBar ? 14 : 16) + 4 * px(12) + leftWidth + rightWidth +
             this._rowPad.width + this._rowEndPad.width + px(size.center));
