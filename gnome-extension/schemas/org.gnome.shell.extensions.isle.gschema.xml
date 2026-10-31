@@ -141,7 +141,7 @@
     <key name="hidden-pages" type="as">
       <default>[]</default>
       <summary>Pages left out of the island</summary>
-      <description>Names of the open island’s pages that have no tab: music, notifications, focus, reminders, shelf, calendar, calories, water, prayer. The Apps and Usage pages have their own switches (app-usage, usage-enabled).</description>
+      <description>Names of the open island’s pages that have no tab: music, devices, notifications, focus, reminders, shelf, calendar, calories, water, prayer. The Apps and Usage pages have their own switches (app-usage, usage-enabled).</description>
     </key>
     <key name="app-usage" type="b">
       <default>false</default>

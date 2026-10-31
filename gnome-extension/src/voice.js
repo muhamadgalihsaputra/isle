@@ -757,7 +757,8 @@ export const VoiceView = GObject.registerClass({
         this._stepsBox.hide();
         this._signIn.hide();
         this._setUp.hide();
-        this._showAction(this._closeButton);
+        // The conversation's own header × is the close while it is open; the pill's would be a second.
+        this._showAction(this.chatOpen ? null : this._closeButton);
         this._syncSend();
         if (focus)
             this._entry.grab_key_focus();

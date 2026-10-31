@@ -865,6 +865,7 @@ function topBarRow(settings, window) {
 /** The open island's pages that can be left out, in tab order, with what goes with each. */
 const PAGES = [
     ['music', 'Music', 'audio-x-generic-symbolic', 'The player and lyrics, and the song in the closed island'],
+    ['devices', 'Devices', 'phone-symbolic', 'A phone or tablet paired through GSConnect: its battery, a ring to find it, and the clipboard sent over. No tab while no device is connected'],
     ['notifications', 'Notifications', 'preferences-system-notifications-symbolic', 'The list to look back at, and its unread dot; alerts show either way'],
     ['focus', 'Focus', 'alarm-symbolic', 'The Pomodoro timer'],
     ['reminders', 'Reminders', 'object-select-symbolic', 'Your to-do list'],

@@ -131,8 +131,13 @@ async fn read_devices(session: &Connection) -> Vec<Device> {
             "GetManagedObjects",
             &(),
         )
-        .await
-        .ok();
+        .await;
+    if let Err(err) = &reply {
+        // The service away is the common case (GSConnect not installed); a bus error with it
+        // running is what the user needs to see when a connected phone does not show up.
+        log::debug!("GSConnect devices unreadable: {err}");
+    }
+    let reply = reply.ok();
     let Some(reply) = reply else {
         return Vec::new();
     };

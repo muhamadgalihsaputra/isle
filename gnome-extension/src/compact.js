@@ -29,6 +29,8 @@ const SIZES = {
 };
 /** The pointer still for this long no longer holds the eyes (as voice.js's POINTER_REST_S). */
 const POINTER_REST_MS = 2500;
+/** How often the resting face reads the pointer: often enough to follow it, rarely enough to cost nothing. */
+const POINTER_POLL_MS = 33;
 /** The music bars' opacity while the song is paused. */
 const PAUSED_OPACITY = 110;
 /** How often the focus ring is redrawn; it moves too slowly to need more. */
@@ -56,7 +58,7 @@ export const CompactView = GObject.registerClass({
         this._inBar = false;
         this._voiceEnabled = false;
         this._timeouts = {};
-        this._assistantPointerTimeline = null;
+        this._assistantPointerTimeline = 0;
         this._widthChangedIdle = 0;
 
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
@@ -287,8 +289,11 @@ export const CompactView = GObject.registerClass({
             const right = [];
             let {left: leftWidth, right: rightWidth} = base;
             for (const [index, item] of statuses.entries()) {
-                const kept = keptSides && (this._leftStatuses.get_children().includes(item) ? left
-                    : this._rightStatuses.get_children().includes(item) ? right : null);
+                // The bell never keeps a side: it landed beside the date before its preference
+                // existed, and keeping it there kept it there forever. It chooses every spread.
+                const kept = keptSides && item !== this._notificationStatus &&
+                    (this._leftStatuses.get_children().includes(item) ? left
+                        : this._rightStatuses.get_children().includes(item) ? right : null);
                 if (kept === left) {
                     left.push(item);
                     leftWidth += widths[index];
@@ -653,8 +658,14 @@ export const CompactView = GObject.registerClass({
             return;
         this._pointerLast = [0, 0];
         this._pointerAt = 0;
-        const followPointer = (timeline, ms) => {
+        // A metronome, not the stage's paint clock: over a plain app's window (a GTK app,
+        // say) nothing repaints the shell, and a timeline's frames stop with the painting —
+        // the chat view's eyes keep moving because its panel paints itself. This reads the
+        // pointer on its own beat, moving the eyes only when the glance truly changed.
+        const started = Date.now();
+        const followPointer = () => {
             const [x, y] = global.get_pointer();
+            const ms = Date.now() - started;
             if (x !== this._pointerLast[0] || y !== this._pointerLast[1]) {
                 this._pointerLast = [x, y];
                 this._pointerAt = ms;
@@ -662,21 +673,20 @@ export const CompactView = GObject.registerClass({
             } else if (ms - this._pointerAt >= POINTER_REST_MS) {
                 this._assistant.lookAway();
             }
+            return GLib.SOURCE_CONTINUE;
         };
-        followPointer(0, 0);
+        followPointer();
         // Animations off: the eyes turn once to where the pointer is and hold there, no ticking.
         if (!St.Settings.get().enable_animations)
             return;
-        this._assistantPointerTimeline = new Clutter.Timeline({actor: this, duration: 1000, repeat_count: -1});
-        this._assistantPointerTimeline.connect('new-frame', followPointer);
-        this._assistantPointerTimeline.start();
+        this._assistantPointerTimeline = GLib.timeout_add(GLib.PRIORITY_DEFAULT, POINTER_POLL_MS, followPointer);
     }
 
     _stopAssistantPointerTracking() {
         if (!this._assistantPointerTimeline)
             return;
-        this._assistantPointerTimeline.stop();
-        this._assistantPointerTimeline = null;
+        GLib.source_remove(this._assistantPointerTimeline);
+        this._assistantPointerTimeline = 0;
     }
 
     /** The assistant's shape and colours, from Settings (see bot.js). */
