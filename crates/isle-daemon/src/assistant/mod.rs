@@ -70,6 +70,8 @@ const TRANSCRIBE_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_TURNS: u32 = 30;
 /// After New chat, the old one can come back (Undo) this long; then it is deleted.
 const UNDO_NEW_CHAT: Duration = Duration::from_secs(5);
+/// How many ended conversations stay readable under `chats/`, newest by their last word's time.
+const ARCHIVED_CHATS: usize = 10;
 /// The AI stays up this long after its last use, so a follow-up needs no start-up; then it quits and its
 /// memory is freed. Opening the island starts it ahead of the request (see `Warm`).
 const KEEP_WARM: Duration = Duration::from_secs(3 * 60);
@@ -1122,6 +1124,7 @@ impl Talk {
         let mut store = Store::new("chat");
         let mut chat: Chat = store.load();
         if chat.expired(chat::now_ms(), keep) {
+            Self::archive_chat(&chat);
             Self::delete(&chat);
             store.remove();
             chat = Chat::default();
@@ -1133,6 +1136,42 @@ impl Talk {
         }
     }
 
+    /// Writes `chat` to the archive folder, keeping the newest ARCHIVED_CHATS of them.
+    fn archive_chat(chat: &Chat) {
+        if chat.is_empty() {
+            return;
+        }
+        let dir = crate::store::data_dir().join("chats");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        let mut kept: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.path())
+                    .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        kept.sort();
+        while kept.len() >= ARCHIVED_CHATS {
+            if let Some(oldest) = kept.first() {
+                let _ = std::fs::remove_file(oldest);
+            }
+            kept.remove(0);
+        }
+        let name = format!("{}.json", chat.last.max(0));
+        if let Ok(bytes) = serde_json::to_vec(chat) {
+            let _ = std::fs::write(dir.join(name), bytes);
+        }
+    }
+
+    /// A conversation replaced in Undo's slot before its time ran out: archived, not lost.
+    fn archive_replaced(&mut self, chat: Chat) {
+        Self::archive_chat(&chat);
+    }
+
     /// Deletes the AI's own copy of `chat`.
     fn delete(chat: &Chat) {
         if let Some(provider) = Provider::from_id(&chat.provider)
@@ -1140,6 +1179,27 @@ impl Talk {
         {
             forget(provider, chat.conversation.clone());
         }
+    }
+
+    /// Puts the conversation aside, kept for reading: it lands under `chats/` as a dated file,
+    /// the oldest beyond ARCHIVE giving way. The AI's own copy goes, as an ended chat's does.
+    fn archive(&mut self, session: &mut Session) {
+        if let Some(chat) = self.take_for_archive(session) {
+            Self::archive_chat(&chat);
+        }
+    }
+
+    /// Takes the conversation out for archiving, ending it as the saved one: the AI's copy goes.
+    fn take_for_archive(&mut self, session: &mut Session) -> Option<Chat> {
+        let chat = std::mem::take(&mut self.chat);
+        if chat.is_empty() {
+            self.store.remove();
+            return None;
+        }
+        Self::delete(&chat);
+        session.drop_conversation();
+        self.store.remove();
+        Some(chat)
     }
 
     /// Keeps the conversation as it is now: saved while there is one, else no file at all.
@@ -1153,18 +1213,11 @@ impl Talk {
         }
     }
 
-    /// Ends the conversation: the island's, the saved one and the AI's are all deleted.
-    fn end(&mut self, session: &mut Session) {
-        session.drop_conversation();
-        self.chat = Chat::default();
-        self.store.remove();
-    }
-
     /// Ends it if it is over (see `Chat::expired`); true if it was.
     fn end_if_over(&mut self, session: &mut Session, keep: Keep) -> bool {
         let over = self.chat.expired(chat::now_ms(), keep);
         if over {
-            self.end(session);
+            self.archive(session);
         }
         over
     }
@@ -1250,10 +1303,10 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     new_day(&mut session, &mut pruned);
                     continue;
                 }
-                // Undo's moment passed: the old conversation is deleted for good.
+                // Undo's moment passed: the old conversation is archived, still readable.
                 () = undo_over => {
                     if let Some((old, _)) = talk.undo.take() {
-                        Talk::delete(&old);
+                        talk.archive_replaced(old);
                     }
                     continue;
                 }
@@ -1333,7 +1386,8 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                 interrupted
             }
             Command::NewChat => {
-                // The old one waits for Undo; the AI starts the new one afresh.
+                // The old one waits for Undo and, past that, is archived for reading; the AI
+                // starts the new one afresh.
                 let old = std::mem::take(&mut talk.chat);
                 let mut kept = old.clone();
                 kept.provider = session.provider.map_or("", Provider::id).to_owned();
@@ -1342,7 +1396,7 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
                     .undo
                     .replace((kept, tokio::time::Instant::now() + UNDO_NEW_CHAT))
                 {
-                    Talk::delete(&older);
+                    talk.archive_replaced(older);
                 }
                 session.brain = None;
                 session.sent_data = None;
@@ -1412,9 +1466,9 @@ pub async fn run(iface: InterfaceRef<AssistantService>, data: Sources, mut comma
             }
             Command::ClearChat => {
                 if let Some((old, _)) = talk.undo.take() {
-                    Talk::delete(&old);
+                    talk.archive_replaced(old);
                 }
-                talk.end(&mut session);
+                talk.archive(&mut session);
                 show_history(&iface, &talk.chat).await;
                 None
             }
