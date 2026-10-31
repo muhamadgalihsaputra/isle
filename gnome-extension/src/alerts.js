@@ -104,7 +104,7 @@ export function capsLock(on) {
 }
 
 /** A `SystemEvent` from the daemon, or null if it is not worth showing. */
-export function system(event, daemon) {
+export function system(event) {
     switch (event.kind) {
     // Charging and battery alerts: a ring that sweeps up to the
     // charge level around a bolt, with the percentage large on the right.
@@ -196,46 +196,6 @@ export function system(event, daemon) {
             tone: event.low ? 'bad' : 'good',
             duration: event.low ? REMINDER_DURATION : STATUS_DURATION,
         };
-    // A phone's call, answered without touching the phone; the buttons hang up or pick up.
-    case 'device_call':
-        return {
-            key: `device-call:${event.id}:${event.caller}`,
-            icon: 'isle-phone-symbolic',
-            motion: 'pulse',
-            title: event.caller,
-            subtitle: `Calling on ${event.name}`,
-            tone: 'good',
-            sticky: true,
-            actions: [
-                {label: 'Decline', callback: () => daemon.call('devices', 'AnswerCall', event.id, false)},
-                {label: 'Accept', primary: true,
-                    callback: () => daemon.call('devices', 'AnswerCall', event.id, true)},
-            ],
-            duration: CRITICAL_DURATION,
-        };
-    // A message arrived on the phone: its sender, its words, and its app's own quick replies.
-    case 'device_message': {
-        const replies = (event.replies ?? []).slice(0, MAX_NOTIFICATION_BUTTONS);
-        const alert = {
-            key: `device-message:${event.id}:${event.sender}:${event.body}`,
-            icon: 'isle-phone-symbolic',
-            title: event.sender,
-            subtitle: `${event.body}`.replace(/\s+/g, ' ').trim(),
-            subtitleLines: 2,
-            tone: 'neutral',
-            closable: true,
-            duration: NOTIFICATION_DURATION,
-        };
-        if (replies.length === 1)
-            alert.action = {label: replies[0], callback: () => daemon.call('devices', 'ReplyMessage', event.id, replies[0])};
-        else if (replies.length > 1)
-            alert.actions = replies.map((reply, index) => ({
-                label: reply,
-                primary: index === replies.length - 1,
-                callback: () => daemon.call('devices', 'ReplyMessage', event.id, reply),
-            }));
-        return alert;
-    }
     default:
         return null;
     }

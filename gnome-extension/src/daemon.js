@@ -165,8 +165,7 @@ const INTERFACES = {
             <method name="Ring"><arg name="id" type="s" direction="in"/></method>
             <method name="SendClipboard"><arg name="id" type="s" direction="in"/><arg name="text" type="s" direction="in"/></method>
             <method name="SendFile"><arg name="id" type="s" direction="in"/><arg name="file" type="s" direction="in"/></method>
-            <method name="AnswerCall"><arg name="id" type="s" direction="in"/><arg name="accept" type="b" direction="in"/></method>
-            <method name="ReplyMessage"><arg name="id" type="s" direction="in"/><arg name="text" type="s" direction="in"/></method>`),
+            <method name="MuteCall"><arg name="id" type="s" direction="in"/></method>`),
         properties: {},
     },
     assistant: {

@@ -73,8 +73,7 @@ const PAGE_MEMORY_MS = 5 * 60 * 1000;
 const ALERT_FIT_DELAY_MS = 60;
 /** Which switch in Settings each kind of system event answers to. */
 const SYSTEM_ALERTS = {power: 'power', battery_low: 'power', battery_full: 'power', network: 'network',
-    bluetooth: 'bluetooth', device: 'power', device_battery: 'power', device_call: 'power',
-    device_message: 'power'};
+    bluetooth: 'bluetooth', device: 'power', device_battery: 'power'};
 /** The open island's header on a display without the top bar. */
 const HEADER_WITHOUT_BAR = 32;
 /** A window's animation (minimizing, say) is over by then, so whether it covers the display is checked again. */
@@ -725,7 +724,7 @@ export class Controller {
             this._post(Alerts.pomodoroFinished(finished, next, daemon.state.pomodoro, daemon));
         });
         daemon.connect('system-event', (_daemon, event) =>
-            this._postSystemAlert(Alerts.system(event, this._daemon), SYSTEM_ALERTS[event.kind] ?? 'power', event.kind === 'battery_low'));
+            this._postSystemAlert(Alerts.system(event), SYSTEM_ALERTS[event.kind] ?? 'power', event.kind === 'battery_low'));
 
         // Sharing or recording the screen, what others write and what was copied stay out of sight.
         this._privacy.connect('changed', () => this._syncSharing());
