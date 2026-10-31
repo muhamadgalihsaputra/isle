@@ -8,13 +8,13 @@
 use std::sync::OnceLock;
 
 use zbus::object_server::InterfaceRef;
+use zbus::zvariant::Value as ZValue;
 use zbus::{Connection, interface};
 
 use crate::system::{Device, SystemService};
 
-/// The GSConnect service and its devices, on the session bus.
+/// The GSConnect service, on the session bus.
 const SERVICE: &str = "org.gnome.Shell.Extensions.GSConnect";
-const DEVICE: &str = "org.gnome.Shell.Extensions.GSConnect.Device";
 
 /// The session bus and the system state, held for the AI's device tools once the service is built.
 static SESSION: OnceLock<Connection> = OnceLock::new();
@@ -41,53 +41,49 @@ impl DevicesService {
             .find(|device| device.id == id)
             .ok_or_else(|| zbus::Error::Failure("no device connected".into()))
     }
+
+    /// Activates one of the device's actions over `org.gtk.Actions`, GSConnect's own way of
+    /// exposing its plugins' actions on the bus.
+    async fn activate(&self, device: &Device, action: &str, arguments: &[ZValue<'_>]) -> zbus::fdo::Result<()> {
+        self.session
+            .call_method(
+                Some(SERVICE),
+                device.id.as_str(),
+                Some("org.gtk.Actions"),
+                "Activate",
+                &(action, arguments, &std::collections::HashMap::<String, ZValue>::new()),
+            )
+            .await?;
+        Ok(())
+    }
 }
 
 #[interface(name = "io.github.zickrian.isle.Devices1")]
 impl DevicesService {
-    /// Rings the device, unless it is gone; returns an error text instead of failing silently.
+    /// Rings the device (Find My Phone), unless it is gone; returns an error text instead of
+    /// failing silently. GSConnect exports its plugins' actions over `org.gtk.Actions`.
     async fn ring(&self, id: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "ring", &())
-            .await?;
-        Ok(())
+        self.activate(&device, "ring", &[]).await
     }
 
     /// Sends the clipboard to the device's share plugin.
     async fn send_clipboard(&self, id: &str, text: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "shareText", &(text,))
-            .await?;
-        Ok(())
+        self.activate(&device, "shareText", &[ZValue::from(text)]).await
     }
 
     /// Sends a file to the device's share plugin; `path` is a local file path.
     async fn send_file(&self, id: &str, file: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "shareUri", &(file,))
-            .await?;
-        Ok(())
+        self.activate(&device, "shareUri", &[ZValue::from(file)]).await
     }
 
-    /// Answers a ringing call on the device's telephony plugin; `accept` picks up or hangs up.
-    async fn answer_call(&self, id: &str, accept: bool) -> zbus::fdo::Result<()> {
+    /// Mutes a ringing call on the device's telephony plugin: the only call action GSConnect
+    /// exports (Accept/Decline stay on the phone itself).
+    async fn mute_call(&self, id: &str) -> zbus::fdo::Result<()> {
         let device = self.device(id).await?;
-        self.session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "reply", &(accept,))
-            .await?;
-        Ok(())
-    }
-
-    /// Sends a text back to the message's sender, through the device's telephony plugin.
-    async fn reply_message(&self, id: &str, text: &str) -> zbus::fdo::Result<()> {
-        let device = self.device(id).await?;
-        self.session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "reply", &(text,))
-            .await?;
-        Ok(())
+        self.activate(&device, "muteCall", &[]).await
     }
 }
 
@@ -102,21 +98,21 @@ pub async fn tool(call: &serde_json::Value) -> String {
     let Some(device) = devices.first() else {
         return "No device is connected through GSConnect.".into();
     };
-    let method = match call["type"].as_str() {
-        Some("find_phone") => "ring",
-        Some("send_clipboard") => "shareText",
+    let (action, argument) = match call["type"].as_str() {
+        Some("find_phone") => ("ring", None),
+        Some("send_clipboard") => ("shareText", Some(call["text"].as_str().unwrap_or_default())),
         _ => return "Unknown device tool.".into(),
     };
-    let argument = call["text"].as_str().unwrap_or_default();
-    let result = if method == "ring" {
-        session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), method, &())
-            .await
-    } else {
-        session
-            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), method, &(argument,))
-            .await
-    };
+    let arguments: Vec<ZValue<'_>> = argument.map(ZValue::from).into_iter().collect();
+    let result = session
+        .call_method(
+            Some(SERVICE),
+            device.id.as_str(),
+            Some("org.gtk.Actions"),
+            "Activate",
+            &(action, arguments.as_slice(), &std::collections::HashMap::<String, ZValue>::new()),
+        )
+        .await;
     match result {
         Ok(_) => format!("Done on {}.", device.name),
         Err(_) => format!("{} did not answer; it may have gone.", device.name),

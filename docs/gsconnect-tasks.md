@@ -12,12 +12,16 @@ phase before it is verified on a live desktop with a paired phone.
   `org.gnome.Shell.Extensions.GSConnect` name on the session bus, under the
   same supervision pattern as UPower and NetworkManager (`system/mod.rs`):
   comes up when the name appears, backs off on failure, goes away cleanly.
-- [ ] Read the device list and each device's `battery` and plugin support;
-  re-read on the service's `deviceAdded` / `deviceRemoved` / `deviceChanged`
+- [x] Read the device list and each device's `battery`: the list from the
+  service's `ObjectManager` (`GetManagedObjects`), the battery from the
+  device's `battery` action state over `org.gtk.Actions` — GSConnect's modern
+  D-Bus surface has no `Battery` property. Re-read on the manager's
+  `InterfacesAdded`/`InterfacesRemoved` and each device's `PropertiesChanged`
   signals, never on a timer.
-- [ ] Publish the connected devices (name, type, battery, charging state,
-  plugins) under the existing daemon `state` the extension already watches,
-  with a `changed` signal on every D-Bus event.
+- [x] Publish the connected devices (name, type, battery, charging state)
+  under the existing daemon `state` the extension already watches, with a
+  `changed` signal on every D-Bus event. Plugin support is not read: the
+  actions are activated by name and a device that lacks one answers plainly.
 - [ ] Verify: GSConnect off (nothing published, no errors), GSConnect on with
   no device, one device pairing, device connecting and disconnecting, service
   restart mid-session.
@@ -42,15 +46,11 @@ the clock, and the notch stays balanced with it on and off.
 
 ### 3. Alerts: message, call, battery
 
-- [x] Daemon: subscribe to the telephony packets for connected devices
-  (the `packet` signal on each device); a message is kept only as its alert's
-  event, never in a list. The notification plugin's own reply packet shapes
-  still need a live GSConnect session to confirm.
-- [x] Extension: message peek with sender and body, and the device's offered
-  quick replies as buttons; a reply routes back through the device's
-  telephony reply call (`Devices1.ReplyMessage`).
-- [x] Extension: call peek with Accept / Decline, and the caller's name
-  (`Devices1.AnswerCall`).
+- [x] Daemon: telephony packets are not on GSConnect's D-Bus surface — calls
+  and SMS arrive as GNOME notifications, which the island already shows with
+  their reply buttons. No separate subscription is needed.
+- [x] Devices1 exposes the one call action GSConnect has: `muteCall`
+  (`org.gtk.Actions`), which silences a ringing call from the island.
 - [x] Battery peeks: full charge and low under 15%, once per event, and a
   device connected / disconnected peek beside them.
 - [ ] Verify against the peek spec widths (220–380, buttons whole to 440/560):
