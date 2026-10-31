@@ -138,6 +138,13 @@ impl SystemService {
     async fn event(emitter: &SignalEmitter<'_>, event: &str) -> zbus::Result<()>;
 }
 
+// Not part of the D-Bus interface: the connected devices, for Devices1's calls (see `devices.rs`).
+impl SystemService {
+    pub fn devices(&self) -> &[Device] {
+        &self.state.devices
+    }
+}
+
 /// Starts every system watcher. Missing services (no battery, no BlueZ) are
 /// logged and retried now and then.
 pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {

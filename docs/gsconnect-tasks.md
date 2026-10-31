@@ -62,14 +62,14 @@ touching the phone.
 
 ### 4. Devices page
 
-- [ ] New `pages/devices.js` following `Page` (`pages/page.js`): one row per
-  connected device — name, type icon, battery and charge state, and the
-  actions its plugins allow: ring (Find My Phone), send file (through the
-  shelf's file picker pattern), send clipboard.
-- [ ] Register in `controller.js` with a tab (name `devices`, icon
-  `isle-phone`), hidden with `hidden-pages` like every page, and no tab at
-  all when the daemon reports no connected device.
-- [ ] Keep it light: built a step at a time like the other pages
+- [x] New `pages/devices.js` following `Page` (`pages/page.js`): one row per
+  connected device — name, type icon, battery's ring and figure, and its
+  actions: ring (Find My Phone) and send clipboard. Send file waits on the
+  XDG file chooser portal, a slice of its own.
+- [x] Register in `controller.js` with a tab (name `devices`, icon
+  `isle-phone-symbolic`), hidden with `hidden-pages` like every page, and no
+  tab at all when the daemon reports no connected device.
+- [x] Keep it light: built a step at a time like the other pages
   (`_buildPages`), nothing synchronous on load.
 - [ ] Verify: page opens cold and warm, ring works, a send reaches the phone,
   and the tab appears and disappears as the device connects.

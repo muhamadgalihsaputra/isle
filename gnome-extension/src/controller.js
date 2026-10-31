@@ -438,6 +438,7 @@ export class Controller {
             () => page('./pages/prayer.js', 'PrayerPage', [this._daemon, size]),
             () => page('./pages/usage.js', 'UsagePage', [this._daemon, size]),
             () => page('./pages/apps.js', 'AppsPage', [this._daemon, this._appUsage, size]),
+            () => page('./pages/devices.js', 'DevicesPage', [this._daemon, size]),
         ];
     }
 
@@ -867,6 +868,9 @@ export class Controller {
             // Apps has its own switch, which times the app in front too: no tab while nothing is timed.
             if (page.name === 'apps')
                 page.hidden = !this._settings.get_boolean('app-usage');
+            // Devices has its tab only while a device is connected (its own `available`).
+            else if (page.name === 'devices')
+                page.hidden = hidden.includes(page.name);
             else if (page.name !== 'call' && page.name !== 'usage')
                 page.hidden = hidden.includes(page.name);
         }
