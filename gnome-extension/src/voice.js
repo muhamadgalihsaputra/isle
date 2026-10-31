@@ -262,6 +262,10 @@ export const VoiceView = GObject.registerClass({
         this._heardButton = new St.Button({child: heardRow, style_class: 'isle-voice-heard-button', reactive: false,
             x_align: Clutter.ActorAlign.START, accessible_name: 'Show the conversation'});
         this._heardButton.connect('clicked', () => this.openChat());
+        // The conversation's own button on the row's end, beside the close: with a saved conversation
+        // it is the always-there way in — the chevron needs a heard line, a fresh chat has none.
+        this._chatButton = iconButton('isle-chevron-up-symbolic', 'isle-voice-chat-button',
+            () => this.openChat(), {size: 12, accessibleName: 'Show the conversation'});
         // After +: the old conversation can come back for a moment.
         this._undo = new St.BoxLayout({style_class: 'isle-voice-undo', visible: false});
         this._undo.add_child(new St.Label({text: 'Started a new chat', style_class: 'isle-voice-undo-text', y_align: Clutter.ActorAlign.CENTER}));
@@ -349,22 +353,33 @@ export const VoiceView = GObject.registerClass({
         row.add_child(this._texts);
         // One round button at the end, its size kept whichever shows, so the texts never shift.
         this._action = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
+        this._chatSlot = new St.Widget({layout_manager: new Clutter.BinLayout(), y_align: Clutter.ActorAlign.CENTER});
         onUiScale(this._action, scale => this._action.set_size(ACTION_SIZE * scale, ACTION_SIZE * scale));
         this._typeButton = iconButton('isle-keyboard-symbolic', 'isle-voice-action', () => this.emit('type-requested'),
             {accessibleName: 'Type instead'});
         this._stop = iconButton('isle-stop-symbolic', 'isle-voice-action isle-voice-stop', () => this.emit('stop'),
             {size: 12, accessibleName: 'Stop'});
-        for (const button of [this._typeButton, this._stop]) {
+        this._closeButton = iconButton('isle-close-symbolic', 'isle-voice-action', () => this.emit('close-requested'),
+            {accessibleName: 'Close assistant'});
+        for (const button of [this._typeButton, this._stop, this._closeButton]) {
             button.set_pivot_point(0.5, 0.5);
             this._action.add_child(button);
         }
+        this._chatButton.set_pivot_point(0.5, 0.5);
+        this._chatSlot.add_child(this._chatButton);
         this._shownAction = null;
+        row.add_child(this._chatSlot);
         row.add_child(this._action);
         // The conversation above the pill's row, when open; the row stays as it is below it.
         this._chat = new ChatView();
         this._chat.visible = false;
         this._chat.connect('new-chat', () => this.emit('new-chat'));
-        this._chat.connect('close', () => this.emit('close-requested'));
+        // The conversation's ×: put the conversation away first, then home — without the first,
+        // the island closed but the conversation stayed open above the pill when it came back.
+        this._chat.connect('close', () => {
+            this.closeChat();
+            this.emit('close-requested');
+        });
         // Selecting text to copy takes the keys for a moment; they come back to the field, so typing goes on.
         this._chat.connect('settled', () => {
             if (this.typing)
@@ -422,6 +437,7 @@ export const VoiceView = GObject.registerClass({
         this._heard.text = top;
         this._heardButton.visible = Boolean(top) && !this.chatOpen;
         this._syncEarlier();
+        this._syncChatButton();
         // By the clock, not the animation's time: that starts over when the view opens again mid-request.
         if (WORKING.includes(state.phase) && !WORKING.includes(this._lastPhase ?? ''))
             this._workingAt = Date.now() / 1000;
@@ -455,7 +471,10 @@ export const VoiceView = GObject.registerClass({
         this._signIn.visible = state.phase === 'error' && Boolean(state.sign_in);
         this._setUp.visible = state.phase === 'error' && Boolean(state.set_up);
         // Stop while it works; else typing instead (to follow up, too).
-        this._showAction(working ? this._stop : this._typeButton);
+        // While it works, Stop; once it answers or errs, the keyboard for a follow-up; the
+        // pill's own close (back to the resting island) shows in the phases that had none.
+        const end = ['reply', 'error'].includes(state.phase) ? this._typeButton : this._closeButton;
+        this._showAction(working ? this._stop : end);
         const searching = (state.phase === 'thinking' && Boolean(state.activity)) || state.phase === 'acting';
         const notHeard = state.phase === 'error' && NOT_HEARD.test(state.error ?? '');
         const form = searching ? 'searching' : notHeard ? 'confused' : {transcribing: 'thinking'}[state.phase] ?? state.phase;
@@ -551,8 +570,14 @@ export const VoiceView = GObject.registerClass({
         if (!items.length && this.chatOpen)
             this.closeChat();
         this._syncEarlier();
+        this._syncChatButton();
         if (this.chatOpen)
             this.emit('size-changed');
+    }
+
+    /** The conversation button shows while a saved conversation can be opened, and is not. */
+    _syncChatButton() {
+        this._chatSlot.visible = Boolean(this._history.length) && !this.chatOpen;
     }
 
     /** The chevron by what was heard, when the conversation holds more than the pill shows. */
@@ -577,6 +602,7 @@ export const VoiceView = GObject.registerClass({
         this._syncClose();
         this._heardButton.visible = false;
         this._syncEarlier();
+        this._syncChatButton();
         this._syncCardText();
         if (!WORKING.includes(this._phase) && this._phase !== 'listening' && !this.typing)
             this.emit('type-requested');
@@ -596,6 +622,7 @@ export const VoiceView = GObject.registerClass({
         this._heardButton.visible = Boolean(this._heard.text);
         this._syncCardText();
         this._syncEarlier();
+        this._syncChatButton();
         this.emit('size-changed');
     }
 
@@ -730,7 +757,7 @@ export const VoiceView = GObject.registerClass({
         this._stepsBox.hide();
         this._signIn.hide();
         this._setUp.hide();
-        this._showAction(null);
+        this._showAction(this._closeButton);
         this._syncSend();
         if (focus)
             this._entry.grab_key_focus();
@@ -761,7 +788,7 @@ export const VoiceView = GObject.registerClass({
         if (button === this._shownAction)
             return;
         this._shownAction = button;
-        for (const other of [this._typeButton, this._stop])
+        for (const other of [this._typeButton, this._stop, this._closeButton])
             other.visible = other === button;
         if (!button || !St.Settings.get().enable_animations)
             return;
