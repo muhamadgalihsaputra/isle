@@ -160,6 +160,15 @@ const INTERFACES = {
             <property name="Agents" type="s" access="read"/>`),
         properties: {Agents: 'agents'},
     },
+    devices: {
+        xml: node('Devices1', `
+            <method name="Ring"><arg name="id" type="s" direction="in"/></method>
+            <method name="SendClipboard"><arg name="id" type="s" direction="in"/><arg name="text" type="s" direction="in"/></method>
+            <method name="SendFile"><arg name="id" type="s" direction="in"/><arg name="file" type="s" direction="in"/></method>
+            <method name="AnswerCall"><arg name="id" type="s" direction="in"/><arg name="accept" type="b" direction="in"/></method>
+            <method name="ReplyMessage"><arg name="id" type="s" direction="in"/><arg name="text" type="s" direction="in"/></method>`),
+        properties: {},
+    },
     assistant: {
         xml: node('Assistant1', `
             <method name="Warm"><arg name="context" type="s" direction="in"/></method>

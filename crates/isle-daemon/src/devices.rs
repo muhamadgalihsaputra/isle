@@ -71,6 +71,24 @@ impl DevicesService {
             .await?;
         Ok(())
     }
+
+    /// Answers a ringing call on the device's telephony plugin; `accept` picks up or hangs up.
+    async fn answer_call(&self, id: &str, accept: bool) -> zbus::fdo::Result<()> {
+        let device = self.device(id).await?;
+        self.session
+            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "reply", &(accept,))
+            .await?;
+        Ok(())
+    }
+
+    /// Sends a text back to the message's sender, through the device's telephony plugin.
+    async fn reply_message(&self, id: &str, text: &str) -> zbus::fdo::Result<()> {
+        let device = self.device(id).await?;
+        self.session
+            .call_method(Some(SERVICE), device.id.as_str(), Some(DEVICE), "reply", &(text,))
+            .await?;
+        Ok(())
+    }
 }
 
 /// One of the AI's device tools (`find_phone`, `send_clipboard`), run on the session bus; its

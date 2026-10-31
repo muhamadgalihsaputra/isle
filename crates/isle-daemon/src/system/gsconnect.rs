@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use zbus::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
 use zbus::object_server::InterfaceRef;
-use zbus::zvariant::ObjectPath;
+use zbus::zvariant::{ObjectPath, Value as ZValue};
 use zbus::{Connection, MatchRule, MessageStream, message::Type as MessageType};
 
 use super::{Device, SystemEvent, SystemService, publish};
@@ -34,20 +34,89 @@ pub async fn watch(session: Connection, iface: InterfaceRef<SystemService>) -> a
     let mut before: Vec<Device> = read_devices(&session).await;
     publish(&iface, |state| state.devices = before.clone(), None).await;
 
+    // The phones' telephony packets (a call ringing, a message arriving), each device's own
+    // `packet` signal; one stream for every device, matched by the signal's interface.
+    let packets = MatchRule::builder()
+        .msg_type(MessageType::Signal)
+        .sender(SERVICE)?
+        .interface(DEVICE)?
+        .member("packet")?
+        .build();
+    let mut packets = MessageStream::for_match_rule(packets, &session, None).await?;
+
     loop {
-        let Some(message) = signals.next().await else {
-            return Ok(());
-        };
-        let Ok(_) = message else { continue };
-        // Any device signal re-reads the list: which device changed matters less
-        // than the list being right, and one read costs no more than a diff.
-        let after = read_devices(&session).await;
-        let events = changes(&before, &after);
-        before.clone_from(&after);
-        publish(&iface, |state| state.devices = after, events.first().cloned()).await;
-        for event in events.into_iter().skip(1) {
-            publish(&iface, |_| (), Some(event)).await;
+        tokio::select! {
+            message = signals.next() => {
+                let Some(message) = message else { return Ok(()) };
+                let Ok(_) = message else { continue };
+                // Any device signal re-reads the list: which device changed matters less
+                // than the list being right, and one read costs no more than a diff.
+                let after = read_devices(&session).await;
+                let events = changes(&before, &after);
+                before.clone_from(&after);
+                publish(&iface, |state| state.devices = after, events.first().cloned()).await;
+                for event in events.into_iter().skip(1) {
+                    publish(&iface, |_| (), Some(event)).await;
+                }
+            }
+            message = packets.next() => {
+                let Some(Ok(message)) = message else { continue };
+                // The packet's own path tells which device sent it; its body is KDE Connect's
+                // packet shape: {type, body{...}}.
+                let path = message.header().path().map(|path| path.to_string());
+                let body = message.body();
+                let Ok(packet) = body.deserialize::<ZValue>() else {
+                    continue;
+                };
+                let Ok(packet) = serde_json::to_value(&packet) else { continue };
+                if let Some(event) = telephony(path.as_deref(), &packet, &before) {
+                    publish(&iface, |_| (), Some(event)).await;
+                }
+            }
         }
+    }
+}
+
+/// A telephony packet worth an alert: a call ringing or a message arriving. A call's end (the
+/// `talked`/`false` event) and anything the phone does not name stay silent: the alert's buttons
+/// answer through the device, and a packet with no caller adds nothing to what was already shown.
+fn telephony(path: Option<&str>, packet: &serde_json::Value, devices: &[Device]) -> Option<SystemEvent> {
+    let body = packet.get("body")?;
+    if packet.get("type")?.as_str()? != "kdeconnect.telephony" {
+        return None;
+    }
+    let text = |key: &str| body.get(key).and_then(|value| value.as_str()).map(str::to_owned);
+    let device = devices.iter().find(|device| Some(device.id.as_str()) == path)?;
+    match body.get("event")?.as_str()? {
+        "ringing" | "ringingPending" => Some(SystemEvent::DeviceCall {
+            id: device.id.clone(),
+            name: device.name.clone(),
+            caller: text("contactName").or_else(|| text("phoneNumber"))
+                .unwrap_or_else(|| "Unknown caller".into()),
+        }),
+        "message" => {
+            // The message is kept only until its alert is dismissed; the replies are the
+            // notification plugin's own quick replies, as the packet carried them.
+            let replies = body
+                .get("replies")
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(SystemEvent::DeviceMessage {
+                id: device.id.clone(),
+                name: device.name.clone(),
+                sender: text("contactName").or_else(|| text("phoneNumber"))
+                    .unwrap_or_else(|| "Unknown sender".into()),
+                body: text("messageBody").unwrap_or_default(),
+                replies,
+            })
+        }
+        _ => None,
     }
 }
 
@@ -146,4 +215,61 @@ async fn read_device(session: &Connection, path: &str) -> Option<Device> {
         battery,
         charging: flag("Charging"),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn devices() -> Vec<Device> {
+        vec![Device {
+            id: "/device/1".into(),
+            name: "Pixel".into(),
+            kind: "smartphone".into(),
+            battery: Some(80),
+            charging: false,
+        }]
+    }
+
+    #[test]
+    fn a_ringing_call_becomes_a_call_event_named_by_its_contact() {
+        let packet = json!({"type": "kdeconnect.telephony",
+            "body": {"event": "ringing", "contactName": "Mum", "phoneNumber": "+62 812"}});
+        let event = telephony(Some("/device/1"), &packet, &devices()).unwrap();
+        match event {
+            SystemEvent::DeviceCall { id, name, caller } => {
+                assert_eq!((id.as_str(), name.as_str(), caller.as_str()),
+                    ("/device/1", "Pixel", "Mum"));
+            }
+            _ => panic!("not a call event"),
+        }
+    }
+
+    #[test]
+    fn a_message_becomes_a_message_event_with_its_quick_replies() {
+        let packet = json!({"type": "kdeconnect.telephony", "body": {"event": "message",
+            "contactName": "Mum", "messageBody": "Dinner?", "replies": ["On my way", "Later"]}});
+        let event = telephony(Some("/device/1"), &packet, &devices()).unwrap();
+        match event {
+            SystemEvent::DeviceMessage { id, sender, body, replies, .. } => {
+                assert_eq!((id.as_str(), sender.as_str(), body.as_str()),
+                    ("/device/1", "Mum", "Dinner?"));
+                assert_eq!(replies, vec!["On my way".to_owned(), "Later".to_owned()]);
+            }
+            _ => panic!("not a message event"),
+        }
+    }
+
+    #[test]
+    fn a_call_ending_and_unknown_packets_stay_silent() {
+        let end = json!({"type": "kdeconnect.telephony",
+            "body": {"event": "talked", "contactName": "Mum"}});
+        assert!(telephony(Some("/device/1"), &end, &devices()).is_none());
+        let ping = json!({"type": "kdeconnect.ping", "body": {}});
+        assert!(telephony(Some("/device/1"), &ping, &devices()).is_none());
+        // A packet from a device Isle does not know (unpaired while ringing) answers nothing.
+        let ring = json!({"type": "kdeconnect.telephony", "body": {"event": "ringing"}});
+        assert!(telephony(Some("/device/9"), &ring, &devices()).is_none());
+    }
 }
