@@ -173,6 +173,29 @@ export function system(event) {
             duration: STATUS_DURATION,
         };
     }
+    case 'device':
+        // A GSConnect device (a phone) came or went; the phone's icon, as Isle's own.
+        return {
+            key: `device:${event.name}`,
+            icon: 'isle-phone-symbolic',
+            title: event.name,
+            subtitle: event.connected ? 'Connected' : 'Disconnected',
+            tone: event.connected ? 'good' : 'neutral',
+            duration: STATUS_DURATION,
+        };
+    case 'device_battery':
+        return {
+            key: `device-battery:${event.name}`,
+            icon: event.low ? 'isle-battery-low-symbolic' : 'isle-bolt',
+            motion: event.low ? undefined : 'pulse',
+            ring: event.percent / 100,
+            ringIconSize: 14,
+            title: event.low ? `${event.name} low battery` : `${event.name} fully charged`,
+            subtitle: event.low ? 'Plug the phone in soon' : 'You can unplug the phone',
+            value: percentText(event.percent),
+            tone: event.low ? 'bad' : 'good',
+            duration: event.low ? REMINDER_DURATION : STATUS_DURATION,
+        };
     default:
         return null;
     }

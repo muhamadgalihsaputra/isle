@@ -898,6 +898,9 @@ impl Session {
              Independent actions go together in one answer. The user may close the island meanwhile: carry on \
              until the request is done.\n\
              Set listen to true only when your answer asks the user a question; Isle then listens for the reply.\n\
+             A phone or tablet paired through GSConnect can be rung to be found (find_phone, a tool \
+             with done false), and sent the clipboard's text (send_clipboard, the text as \
+             its \"text\" field). No device connected answers plainly. \
              Never claim to have done something no action does. {own_tools} Isle runs commands for you through \
              check (looking, at once) and run (changing, once the user approves), so you can find out anything \
              about this computer, install, update and fix things; never tell the user to do it themselves in a \

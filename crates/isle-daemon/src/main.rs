@@ -8,6 +8,7 @@ mod agents;
 mod app_usage;
 mod assistant;
 mod calendar;
+mod devices;
 mod caller;
 mod calories;
 mod clipboard;
@@ -43,6 +44,7 @@ use crate::assistant::AssistantService;
 use crate::calendar::CalendarService;
 use crate::calories::CaloriesService;
 use crate::clipboard::ClipboardService;
+use crate::devices::DevicesService;
 use crate::media::MediaService;
 use crate::pomodoro::PomodoroService;
 use crate::prayer::PrayerService;
@@ -179,6 +181,7 @@ async fn run() -> anyhow::Result<()> {
     let pomodoro = server.interface::<_, PomodoroService>(OBJECT_PATH).await?;
     let todo = server.interface::<_, TodoService>(OBJECT_PATH).await?;
     let system = server.interface::<_, SystemService>(OBJECT_PATH).await?;
+    server.at(OBJECT_PATH, DevicesService::new(session.clone(), system.clone())).await?;
     let app_usage = server.interface::<_, AppUsageService>(OBJECT_PATH).await?;
     let assistant = server.interface::<_, AssistantService>(OBJECT_PATH).await?;
     let usage = server.interface::<_, UsageService>(OBJECT_PATH).await?;
@@ -209,9 +212,11 @@ async fn run() -> anyhow::Result<()> {
     tokio::spawn(assistant::run(assistant, own_data, assistant_commands));
 
     match zbus::Connection::system().await {
-        Ok(bus) => system::spawn_watchers(bus, system),
+        Ok(bus) => system::spawn_watchers(bus, system.clone()),
         Err(err) => warn!("no system bus, so no battery, network or Bluetooth status: {err}"),
     }
+    // GSConnect is a GNOME Shell extension on the session bus, not the system one.
+    system::spawn_session_watchers(session.clone(), system);
 
     // Claim the name last, so callers never see a half-initialised service; never taking it from another.
     let claimed = session

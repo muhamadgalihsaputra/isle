@@ -114,6 +114,8 @@ const TOOLS: &[&str] = &[
     "top_processes",
     "chrome_profiles",
     "check",
+    "find_phone",
+    "send_clipboard",
 ];
 
 /// One of `TOOLS`.
@@ -164,6 +166,8 @@ fn describe(call: &Value) -> String {
         Some("top_processes") => "Checking what’s using the computer…".into(),
         Some("check") => check_words(call["command"].as_str().unwrap_or_default()).into(),
         Some("chrome_profiles") => "Looking at Chrome’s profiles…".into(),
+        Some("find_phone") => "Ringing your phone…".into(),
+        Some("send_clipboard") => "Sending it to your phone…".into(),
         _ => "Working…".into(),
     }
 }
@@ -219,6 +223,9 @@ fn strings(value: &Value) -> Vec<String> {
 async fn run(call: Value) -> String {
     if call["type"] == "check" {
         return check::run(call["command"].as_str().unwrap_or_default()).await;
+    }
+    if matches!(call["type"].as_str(), Some("find_phone") | Some("send_clipboard")) {
+        return crate::devices::tool(&call).await;
     }
     tokio::task::spawn_blocking(move || run_now(&call, &home()))
         .await
@@ -682,6 +689,12 @@ mod tests {
             "Reading the system log…"
         );
         assert_eq!(check("uname -a"), "Checking this computer…");
+        assert_eq!(
+            describe(&json!({"type": "find_phone"})),
+            "Ringing your phone…"
+        );
+        assert_eq!(is_tool(&json!({"type": "find_phone"})), true);
+        assert_eq!(is_tool(&json!({"type": "send_clipboard", "text": "hi"})), true);
         assert!(is_tool(&find) && !is_tool(&json!({"type": "open_url"})));
     }
 

@@ -6,6 +6,7 @@
 
 mod bluetooth;
 mod camera;
+mod gsconnect;
 mod network;
 mod power;
 mod sleep;
@@ -41,6 +42,8 @@ pub struct SystemState {
     pub bluetooth: Vec<BluetoothDevice>,
     /// A camera is open in some app (privacy indicator).
     pub camera_in_use: bool,
+    /// GSConnect's connected devices (a phone, a tablet), with their batteries.
+    pub devices: Vec<Device>,
 }
 
 /// The laptop's own battery, from UPower's display device.
@@ -62,6 +65,18 @@ pub struct Network {
     pub connection: String,
     /// Connection name; the network name (SSID) for Wi-Fi.
     pub name: String,
+}
+
+/// A connected GSConnect device: a phone or tablet paired through GSConnect; `id` is its
+/// GSConnect object path. `battery` is None when the device reports no level.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Device {
+    pub id: String,
+    pub name: String,
+    /// GSConnect's device type: "smartphone", "tablet"...
+    pub kind: String,
+    pub battery: Option<u8>,
+    pub charging: bool,
 }
 
 /// A connected Bluetooth device; `path` is its BlueZ object.
@@ -91,6 +106,17 @@ pub enum SystemEvent {
         connected: bool,
         device: BluetoothDevice,
     },
+    /// A GSConnect device connected or went.
+    Device {
+        connected: bool,
+        name: String,
+    },
+    /// A GSConnect device's battery crossed a line: low (15) or full.
+    DeviceBattery {
+        low: bool,
+        name: String,
+        percent: u8,
+    },
 }
 
 /// isled's `System1` D-Bus object.
@@ -110,6 +136,13 @@ impl SystemService {
     /// JSON `SystemEvent`, tagged by its "kind" field.
     #[zbus(signal)]
     async fn event(emitter: &SignalEmitter<'_>, event: &str) -> zbus::Result<()>;
+}
+
+// Not part of the D-Bus interface: the connected devices, for Devices1's calls (see `devices.rs`).
+impl SystemService {
+    pub fn devices(&self) -> &[Device] {
+        &self.state.devices
+    }
 }
 
 /// Starts every system watcher. Missing services (no battery, no BlueZ) are
@@ -135,6 +168,12 @@ pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
         bluetooth::watch(bus.clone(), state.clone())
     });
     supervise("camera", None, move || camera::watch(iface.clone()));
+}
+
+/// Starts the session-bus watchers: GSConnect, which is a GNOME Shell extension and so never on
+/// the system bus. The connection is the one isled already holds.
+pub fn spawn_session_watchers(session: Connection, iface: InterfaceRef<SystemService>) {
+    supervise("GSConnect", None, move || gsconnect::watch(session.clone(), iface.clone()));
 }
 
 /// The system services the watchers follow, on the system bus.

@@ -1370,3 +1370,10 @@
 #isleIsland.isle-accent-system .isle-pill-decision:active { background-color: st-darken(-st-accent-color, 5%); }
 #isleIsland.isle-accent-system .isle-entry { caret-color: -st-accent-color; selection-background-color: -st-accent-color; }
 #isleIsland.isle-accent-system .isle-entry:focus { box-shadow: inset 0 0 0 2px st-transparentize(-st-accent-color, 0.4) !important; }
+
+/* Devices page: one row per connected GSConnect device. */
+.isle-devices-list { spacing: 10px; }
+.isle-devices-row { spacing: 12px; }
+.isle-devices-name { font-size: 15px; font-weight: 600; }
+.isle-devices-figure { font-size: 11px; font-weight: 700; font-feature-settings: "tnum"; }
+.isle-devices-actions { spacing: 6px; }
