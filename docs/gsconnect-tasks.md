@@ -44,12 +44,15 @@ the clock, and the notch stays balanced with it on and off.
 
 - [ ] Daemon: subscribe to the notification and telephony packets for
   connected devices; keep the last message only, and only until its alert is
-  dismissed.
+  dismissed. Needs a live GSConnect session to verify against: the packet
+  shapes (telephony, notification reply) can only be confirmed with a paired
+  phone, so this is done on a live desktop, not from the sandbox.
 - [ ] Extension: message peek with sender, app and body, and the device's
   offered quick replies as buttons; a reply routes back through the
   notification plugin's reply call.
 - [ ] Extension: call peek with Accept / Decline, and the caller's name.
-- [ ] Battery peeks: full charge and low under 15%, once per event.
+- [x] Battery peeks: full charge and low under 15%, once per event, and a
+  device connected / disconnected peek beside them.
 - [ ] Verify against the peek spec widths (220–380, buttons whole to 440/560):
   a long message body truncates, two quick replies fit, and the call alert
   out-ranks a message alert.

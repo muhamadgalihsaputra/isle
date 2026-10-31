@@ -106,6 +106,17 @@ pub enum SystemEvent {
         connected: bool,
         device: BluetoothDevice,
     },
+    /// A GSConnect device connected or went.
+    Device {
+        connected: bool,
+        name: String,
+    },
+    /// A GSConnect device's battery crossed a line: low (15) or full.
+    DeviceBattery {
+        low: bool,
+        name: String,
+        percent: u8,
+    },
 }
 
 /// isled's `System1` D-Bus object.

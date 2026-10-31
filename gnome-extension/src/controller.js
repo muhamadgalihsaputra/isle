@@ -72,7 +72,8 @@ const PAGE_MEMORY_MS = 5 * 60 * 1000;
 /** An alert's width is checked again this soon after it shows. */
 const ALERT_FIT_DELAY_MS = 60;
 /** Which switch in Settings each kind of system event answers to. */
-const SYSTEM_ALERTS = {power: 'power', battery_low: 'power', battery_full: 'power', network: 'network', bluetooth: 'bluetooth'};
+const SYSTEM_ALERTS = {power: 'power', battery_low: 'power', battery_full: 'power', network: 'network',
+    bluetooth: 'bluetooth', device: 'power', device_battery: 'power'};
 /** The open island's header on a display without the top bar. */
 const HEADER_WITHOUT_BAR = 32;
 /** A window's animation (minimizing, say) is over by then, so whether it covers the display is checked again. */

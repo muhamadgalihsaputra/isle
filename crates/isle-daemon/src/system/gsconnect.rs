@@ -12,10 +12,13 @@ use zbus::object_server::InterfaceRef;
 use zbus::zvariant::ObjectPath;
 use zbus::{Connection, MatchRule, MessageStream, message::Type as MessageType};
 
-use super::{Device, SystemService, publish};
+use super::{Device, SystemEvent, SystemService, publish};
 
 const SERVICE: &str = "org.gnome.Shell.Extensions.GSConnect";
 const DEVICE: &str = "org.gnome.Shell.Extensions.GSConnect.Device";
+
+/// A battery at or under this is low; at 100 it is full. Each crossing is one alert, not one per report.
+const LOW: i16 = 15;
 
 /// Follows GSConnect: each connected device and its battery, published to the state as it changes.
 pub async fn watch(session: Connection, iface: InterfaceRef<SystemService>) -> anyhow::Result<()> {
@@ -27,9 +30,9 @@ pub async fn watch(session: Connection, iface: InterfaceRef<SystemService>) -> a
         .interface(SERVICE)?
         .build();
     let mut signals = MessageStream::for_match_rule(rule, &session, None).await?;
-    // Devices that were already paired when Isle started.
-    let devices = read_devices(&session).await;
-    publish(&iface, |state| state.devices = devices, None).await;
+    // Devices that were already paired when Isle started, before their first change is an event.
+    let mut before: Vec<Device> = read_devices(&session).await;
+    publish(&iface, |state| state.devices = before.clone(), None).await;
 
     loop {
         let Some(message) = signals.next().await else {
@@ -38,9 +41,47 @@ pub async fn watch(session: Connection, iface: InterfaceRef<SystemService>) -> a
         let Ok(_) = message else { continue };
         // Any device signal re-reads the list: which device changed matters less
         // than the list being right, and one read costs no more than a diff.
-        let devices = read_devices(&session).await;
-        publish(&iface, |state| state.devices = devices, None).await;
+        let after = read_devices(&session).await;
+        let events = changes(&before, &after);
+        before.clone_from(&after);
+        publish(&iface, |state| state.devices = after, events.first().cloned()).await;
+        for event in events.into_iter().skip(1) {
+            publish(&iface, |_| (), Some(event)).await;
+        }
     }
+}
+
+/// What changed between two reads of the device list, as events worth an alert: a device coming
+/// or going, and a battery crossing a line (low under [`LOW`], full at 100). Each crossing alerts
+/// once, by remembering the side it came from.
+fn changes(before: &[Device], after: &[Device]) -> Vec<SystemEvent> {
+    let mut events = Vec::new();
+    for device in after {
+        let was = before.iter().find(|d| d.id == device.id);
+        // Newly connected: one event, whatever its battery says.
+        let Some(was) = was else {
+            events.push(SystemEvent::Device { connected: true, name: device.name.clone() });
+            continue;
+        };
+        let Some(level) = device.battery else { continue };
+        let was_level = was.battery;
+        // Only a crossing alerts: into low from above it, to full from below it.
+        let into_low = level <= LOW as u8 && was_level.is_some_and(|was| was > LOW as u8);
+        let to_full = level == 100 && was_level.is_some_and(|was| was < 100);
+        if into_low || to_full {
+            events.push(SystemEvent::DeviceBattery {
+                low: into_low,
+                name: device.name.clone(),
+                percent: level,
+            });
+        }
+    }
+    for device in before {
+        if !after.iter().any(|d| d.id == device.id) {
+            events.push(SystemEvent::Device { connected: false, name: device.name.clone() });
+        }
+    }
+    events
 }
 
 /// Every paired device, with its battery and whether it is connected.
