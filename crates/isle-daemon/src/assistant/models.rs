@@ -374,7 +374,10 @@ impl Shared {
 async fn read(provider: Provider) -> Found {
     // These providers expose their own model lists through `ListModels`; they do not have an
     // account-plan catalog to read here.
-    if matches!(provider, Provider::Hermes | Provider::OpenAi | Provider::OhMyPi) {
+    if matches!(
+        provider,
+        Provider::Hermes | Provider::OpenAi | Provider::OhMyPi
+    ) {
         return Found::Gone;
     }
     let Some(program) = provider.program().filter(|_| provider.signed_in()) else {

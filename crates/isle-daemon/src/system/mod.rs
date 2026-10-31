@@ -173,7 +173,9 @@ pub fn spawn_watchers(system: Connection, iface: InterfaceRef<SystemService>) {
 /// Starts the session-bus watchers: GSConnect, which is a GNOME Shell extension and so never on
 /// the system bus. The connection is the one isled already holds.
 pub fn spawn_session_watchers(session: Connection, iface: InterfaceRef<SystemService>) {
-    supervise("GSConnect", None, move || gsconnect::watch(session.clone(), iface.clone()));
+    supervise("GSConnect", None, move || {
+        gsconnect::watch(session.clone(), iface.clone())
+    });
 }
 
 /// The system services the watchers follow, on the system bus.

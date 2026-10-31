@@ -33,7 +33,11 @@ impl WaterLog {
         }
         self.next_id += 1;
         let id = self.next_id;
-        self.entries.push(WaterEntry { id, amount_ml, at_ms });
+        self.entries.push(WaterEntry {
+            id,
+            amount_ml,
+            at_ms,
+        });
         self.entries.sort_by_key(|entry| entry.at_ms);
         Some(id)
     }

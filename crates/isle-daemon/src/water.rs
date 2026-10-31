@@ -49,7 +49,9 @@ impl WaterService {
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
         if !self.log.remove(id) {
-            return Err(fdo::Error::InvalidArgs(format!("no water entry with id {id}")));
+            return Err(fdo::Error::InvalidArgs(format!(
+                "no water entry with id {id}"
+            )));
         }
         self.changed(&emitter).await?;
         Ok(())
