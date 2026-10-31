@@ -117,6 +117,23 @@ pub enum SystemEvent {
         name: String,
         percent: u8,
     },
+    /// A phone's call started ringing: answer or hang up without touching the phone.
+    DeviceCall {
+        /// The device's GSConnect object path, so the answer routes back to the same phone.
+        id: String,
+        name: String,
+        /// Who is calling, as the telephony packet names them.
+        caller: String,
+    },
+    /// A message arrived on the phone: its sender, body and the replies its app offers.
+    DeviceMessage {
+        id: String,
+        name: String,
+        sender: String,
+        body: String,
+        /// The quick replies the notification plugin offered, in order; may be empty.
+        replies: Vec<String>,
+    },
 }
 
 /// isled's `System1` D-Bus object.
