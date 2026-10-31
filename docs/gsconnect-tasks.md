@@ -79,13 +79,15 @@ page or tab while no device is there.
 
 ### 5. Assistant actions
 
-- [ ] Add `find_phone` and `send_to_device` to the answer schema
+- [x] Add `find_phone` and `send_clipboard` to the answer schema
   (`answer.rs`), and document them in the daemon's system prompt.
-- [ ] Run them through the daemon's GSConnect module, only with a connected
+- [x] Run them through the daemon's GSConnect module, only with a connected
   device; a missing GSConnect answers plainly ("no phone connected"), never
   an error dump.
-- [ ] Verify: `find_phone` rings; `send_to_device` sends the clipboard; the
-  Allow / Deny path covers `send_to_device` like other outbound actions.
+- [ ] Verify on a live desktop with a paired phone: `find_phone` rings and
+  `send_clipboard` sends. The Allow / Deny path does not cover these (they
+  act on the phone, not this computer); a wrong number or a vanished device
+  answers plainly.
 
 Acceptance: "cari hp aku" rings the phone through the island's assistant.
 
