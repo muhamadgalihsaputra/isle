@@ -69,7 +69,8 @@ fn yes() -> bool {
     true
 }
 
-/// The answer in `text`: its JSON, also inside a ```json fence, else the text as said, without actions.
+/// The answer in `text`: its JSON, also inside a ```json fence or after a gateway's own note, else the
+/// text as said, without actions.
 pub fn from_text(text: &str) -> Answer {
     let text = text.trim();
     let inner = text
@@ -77,9 +78,48 @@ pub fn from_text(text: &str) -> Answer {
         .or_else(|| text.strip_prefix("```"))
         .and_then(|rest| rest.trim_end().strip_suffix("```"))
         .map_or(text, str::trim);
-    let mut answer: Answer = serde_json::from_str(inner).unwrap_or_else(|_| Answer::plain(text));
+    let mut answer: Answer = serde_json::from_str(inner).or_else(|_| find_json(inner))
+        .unwrap_or_else(|_| Answer::plain(text));
     answer.actions.iter_mut().for_each(window_focus);
     answer
+}
+
+/// The JSON answer inside `text`, wherever the object starts: a gateway streaming a response it
+/// "transformed" writes its own note before the JSON, so the whole is not an object but the answer
+/// is in there all the same.
+fn find_json(text: &str) -> Result<Answer, serde_json::Error> {
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while let Some(found) = text[start..].find('{') {
+        let at = start + found;
+        let mut depth = 0;
+        let mut in_string = false;
+        let mut escaped = false;
+        for (i, &byte) in bytes.iter().enumerate().skip(at) {
+            let c = char::from(byte);
+            if escaped {
+                escaped = false;
+            } else if in_string && c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = !in_string;
+            } else if !in_string {
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' && depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        if let Ok(answer) = serde_json::from_str(&text[at..=i]) {
+                            return Ok(answer);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        start = at + 1;
+    }
+    serde_json::from_str("{")
 }
 
 /// A `focus` naming an app or window means switching to it, not the focus timer (Codex mixes the two up).
@@ -193,5 +233,12 @@ mod tests {
         let plain = from_text("  Sure, it is 3 pm.  ");
         assert_eq!(plain.say, "Sure, it is 3 pm.");
         assert!(plain.actions.is_empty() && plain.done);
+        // A gateway's own note before the JSON (Hermes streaming): the answer is read all the same.
+        let noted = from_text("[Response transformed after streaming] {\"say\":\"wei, galih. ada apa?\",\"actions\":[]}");
+        assert_eq!(noted.say, "wei, galih. ada apa?");
+        assert!(noted.actions.is_empty() && noted.done);
+        // Words that hold a brace are said as they are, not read as an answer.
+        let spoken = from_text("the array is empty, {} and all");
+        assert_eq!(spoken.say, "the array is empty, {} and all");
     }
 }

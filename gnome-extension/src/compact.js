@@ -60,9 +60,11 @@ export const CompactView = GObject.registerClass({
         const row = new St.BoxLayout({style_class: 'isle-compact-row', x_expand: true, y_expand: true});
         this._row = row;
         this.add_child(row);
-        // Two pads that share whatever room the row has: whatever the sides weigh, the pads take the
-        // same amount each, so the assistant sits in the middle of the notch whatever is on.
-        this._rowPad = new St.Widget({x_expand: true});
+        // Two pads that hold the sides apart around the assistant: whatever the sides weigh, the pads'
+        // widths balance them (see `preferredWidth`), so the assistant sits in the middle of the notch
+        // whatever is on.
+        this._rowPad = new St.Widget({x_expand: false});
+        this._rowEndPad = new St.Widget({x_expand: false});
 
         this._left = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-clock-side', x_expand: false,
             y_align: Clutter.ActorAlign.CENTER});
@@ -138,25 +140,24 @@ export const CompactView = GObject.registerClass({
         this._botLookChanged = ['bot-shape', 'bot-color', 'bot-glow'].map(key =>
             settings.connect(`changed::${key}`, () => (this._assistant.look = this._botLook())));
         this._statusItems = [this._serviceDown, this._timerStatus, this._recordingStatus, this._callStatus,
-            this._notificationStatus, this._musicStatus, this._weatherStatus];
+            this._notificationStatus, this._weatherStatus];
         this._leftStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         this._rightStatuses = new St.BoxLayout({style_class: 'isle-compact-status',
             y_align: Clutter.ActorAlign.CENTER});
         for (const item of this._statusItems)
             this._leftStatuses.add_child(item);
-        this._leftSpacer = new St.Widget({x_expand: true});
         this._left.add_child(this._musicArt);
         this._left.add_child(this._leftStatuses);
-        this._left.add_child(this._leftSpacer);
         this._left.add_child(this._clockBox);
         this._privacyDots = new PrivacyDots();
         this._right = new St.BoxLayout({style_class: 'isle-compact-side isle-compact-status', x_expand: false, y_align: Clutter.ActorAlign.CENTER});
-        this._rightSpacer = new St.Widget({x_expand: true});
         this._right.add_child(this._restDate);
-        this._right.add_child(this._rightSpacer);
         this._right.add_child(this._rightStatuses);
         this._right.add_child(this._privacyDots);
+        // The song's two signs live in opposite corners, as the island's own music page splits them:
+        // the cover at the notch's left edge, the dancing bars at its right edge.
+        this._right.add_child(this._musicStatus);
         // The clock and the date sit beside the assistant and never move; the live statuses rest
         // at the notch's outer edges, so nothing crowds the centre or reads as a second time.
 
@@ -172,7 +173,7 @@ export const CompactView = GObject.registerClass({
         row.add_child(this._left);
         row.add_child(this._assistantButton);
         row.add_child(this._right);
-        row.add_child(new St.Widget({x_expand: true}));
+        row.add_child(this._rowEndPad);
 
         this._daemonChanged = daemon.connect('changed', (_daemon, key) => {
             if (['nowPlaying', 'pomodoro'].includes(key))
@@ -206,27 +207,33 @@ export const CompactView = GObject.registerClass({
         this.connect('destroy', () => this._onDestroy());
     }
 
-    /** The island's natural width: both sides take the wider one's room, so the assistant stays centred. */
+    /** The island's natural width: the sides take only what they show, so the assistant stays centred
+     * and no dead stretch opens inside either side. */
     get preferredWidth() {
         const size = SIZES[this._inBar ? 'inBar' : 'hanging'];
         // Gaps match `.isle-compact-clock-side` and `.isle-compact-status`.
         const gap = px(this._inBar ? 10 : 12);
-        // Each of the art tile and the statuses box stands a gap from its neighbours, as the side's
-        // own spacing lays them out.
-        const leftItems = [this._musicArt, this._leftStatuses].filter(item => item.visible)
-            .map(item => item.get_preferred_width(-1)[1]);
-        const leftWidth = leftItems.reduce((total, width) => total + width + gap, 0) +
-            this._clockBox.get_preferred_width(-1)[1];
-        // Both sides end flush at the assistant; each item stands a gap from its neighbours.
-        // The right side also holds the spacer, which is why one gap per item measures the whole side.
-        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
+        // The side's own spacing lays its children out: one gap between each pair of them, so a side
+        // measures as the sum of what is on plus a gap per pair.
+        const leftItems = [this._musicArt, this._leftStatuses, this._clockBox].filter(item => item.visible);
+        const leftWidth = leftItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
+            gap * Math.max(0, leftItems.length - 1);
+        // The bars sit in the right corner, the cover's opposite, past the privacy dots.
+        const rightItems = [this._restDate, this._rightStatuses, this._privacyDots, this._musicStatus]
+            .filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
-            gap * rightItems.length;
-        // The sides take their natural width; the row's two end pads share what room the island has
-        // beyond that, so the whole row sits centred and the assistant with it. No side is stretched
-        // to the other's width, which left the lighter one's spacer as a long dead stretch.
-        // Row padding, one row gap either side of the assistant, and the pads' least width.
-        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + leftWidth + rightWidth + px(size.center));
+            gap * Math.max(0, rightItems.length - 1);
+        // The sides take their natural width; their imbalance is worn by the row's two end pads, all
+        // of it on the lighter side's, so the assistant sits in the middle of the notch whatever is
+        // on (a pad and a side weigh the same on either side of it). No side is stretched to the
+        // other's width, which left the lighter one's spacer as a long dead stretch, and no spacer
+        // sits inside a side to catch spare room and split the content.
+        const imbalance = Math.abs(leftWidth - rightWidth);
+        this._rowPad.width = Math.ceil(px(size.side) + (leftWidth < rightWidth ? imbalance : 0));
+        this._rowEndPad.width = Math.ceil(px(size.side) + (leftWidth > rightWidth ? imbalance : 0));
+        // Row padding, and the row's four gaps: pad, side, assistant, side, pad.
+        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 4 * px(12) + leftWidth + rightWidth +
+            this._rowPad.width + this._rowEndPad.width + px(size.center));
     }
 
     /**
@@ -438,14 +445,14 @@ export const CompactView = GObject.registerClass({
             recording && this._recordingStatus,
             onCall && this._callStatus,
             this._unseen > 0 && this._notificationStatus,
-            hasTrack && this._musicStatus,
             this._weather.state.temperature && this._weatherStatus,
         ].filter(Boolean);
         this._spreadStatuses(statuses);
         // The cover sits in the left corner while the song plays; the placeholder stands while a
-        // player sends no art.
+        // player sends no art. The bars sit in the right corner, its opposite.
         this._musicArt.visible = !this._isServiceDown && hasTrack;
         this._musicArt.setPath(this._isServiceDown || !hasTrack ? '' : nowPlaying.art_path);
+        this._musicStatus.visible = !this._isServiceDown && hasTrack;
         this._restDate.visible = !this._isServiceDown;
         this._privacyDots.visible = true;
         this._notificationCount.text = this._unseen > 9 ? '9+' : `${this._unseen || ''}`;
