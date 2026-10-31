@@ -759,6 +759,10 @@ impl Session {
              words. Be natural, casual and warm, never stiff or robotic; in Indonesian say \"aku\" and \"kamu\". \
              Talk with the user, not at them: follow the conversation, remember what was said, engage with their \
              ideas, give your own opinion and recommendation with the reason when asked what you think.\n\
+             `say` is shown to the user exactly as you write it, and it is all they see of your \
+             thinking: never put your reasoning, planning, notes to yourself or remarks about your own \
+             process in it — those belong nowhere in the answer. It speaks only to the user, in their \
+             language.\n\
              How long `say` is depends on the request. For something done (\"buka spotify\", \"volume 30\") or a \
              quick fact: one short sentence. For an explanation, a discussion, research, or what you found out \
              about a problem: as long as it takes to be really useful, usually 40 to 200 words, up to 300 for \
@@ -955,8 +959,10 @@ impl Session {
             "You are talking to the user through Isle, a notch in the top bar of their Linux (GNOME) \
              desktop: whatever Isle reports about this computer is its own view, sent to you as data. \
              Keep your own personality, memory and skills; speak in the user's language as you always \
-             do. Typed or spoken requests may be misheard: work out what was meant from how it sounds.
-\
+             do. Typed or spoken requests may be misheard: work out what was meant from how it sounds.\n\
+             `say` is shown to the user exactly as you write it, and it is all they see of your \
+             thinking: never put your reasoning, planning, notes to yourself or remarks about \
+             your own process in it. It speaks only to the user, in their language.\n\
              To act on the desktop, list actions; Isle runs them in order:\n\
              - open_url {{url}}: a website or a search\n\
              - open_app {{app}}: launch an installed app; close_app {{app}} quits one\n\
