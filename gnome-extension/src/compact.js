@@ -222,13 +222,11 @@ export const CompactView = GObject.registerClass({
         const rightItems = [this._restDate, this._rightStatuses, this._privacyDots].filter(item => item.visible);
         const rightWidth = rightItems.reduce((total, item) => total + item.get_preferred_width(-1)[1], 0) +
             gap * rightItems.length;
-        const sideWidth = Math.max(px(size.side), leftWidth, rightWidth);
-        // Each side pads itself out to the same width, so the two pads at the row's ends share the
-        // same room and the assistant sits centred; the pads take up whatever the sides fall short.
-        this._left.width = sideWidth;
-        this._right.width = sideWidth;
-        // Row padding, one row gap either side of the assistant.
-        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + 2 * sideWidth + px(size.center));
+        // The sides take their natural width; the row's two end pads share what room the island has
+        // beyond that, so the whole row sits centred and the assistant with it. No side is stretched
+        // to the other's width, which left the lighter one's spacer as a long dead stretch.
+        // Row padding, one row gap either side of the assistant, and the pads' least width.
+        return Math.ceil(2 * px(this._inBar ? 14 : 16) + 2 * px(12) + leftWidth + rightWidth + px(size.center));
     }
 
     /**
